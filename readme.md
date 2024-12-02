@@ -1,1 +1,1 @@
-Word Recognition : https://github.com/pythonlessons/mltu/tree/main/Tutorials/07_pytorch_wrapper
+Word Recognition : https://github.com/pythonlessons/mltu/tree/main/Tutorials/08_handwriting_recognition_torch

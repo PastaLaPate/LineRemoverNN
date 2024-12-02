@@ -1,8 +1,5 @@
-import os
 import torch
 from torch import nn
-from torch.utils.data import DataLoader
-from torchvision import datasets, transforms
 
 device = (
     "cuda"
@@ -12,6 +9,7 @@ device = (
     else "cpu"
 )
 print(f"Using {device} device")
+
 class NeuralNetwork(nn.Module):
     # Input is 512x512 grayscale image
     def __init__(self):
@@ -27,17 +25,13 @@ class NeuralNetwork(nn.Module):
             nn.BatchNorm2d(16),
             nn.LeakyReLU(),
             
-            nn.Conv2d(16, 8, (3, 3), padding=1),   # Smaller filter, 16 -> 8 filters
+            # Standard small filter for fine details
+            nn.Conv2d(16, 8, (3, 3), padding=1),  # Small fine-grained filter
             nn.BatchNorm2d(8),
             nn.LeakyReLU(),
         )
-        self.flatten = nn.Flatten()
 
     def forward(self, x):
         mask = self.network(x)  # Pass input through network to get the mask
-        output = x - torch.flatten(mask)      # Subtract the mask from the input
+        output = x - mask       # Subtract the mask from the input
         return output
-
-# Instantiate model
-model = NeuralNetwork().to(device)
-print(model)

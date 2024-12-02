@@ -5,6 +5,7 @@ from random import randint
 import tqdm
 from functools import lru_cache
 from multiprocessing import Pool
+import json
 
 # Load word metadata
 words = []
@@ -22,6 +23,7 @@ with open('./words.txt', encoding='UTF-8', mode='r') as words_file:
 
 pages_dir = './generated-pages/'
 nolines_dir = './generated-nolines-pages/'
+json_dir = './generated-words/'
 
 # Transparent background function
 def makeTransparentBG(img):
@@ -47,11 +49,12 @@ def make_page(imageIndex):
     """Generate a single page with random words."""
     page = PIL.Image.new(mode='RGBA', size=(2480, 3508), color=(255, 255, 255))
     draw = PIL.ImageDraw.Draw(page)
-    x = 0
-    y = 0
+    x = 30
+    y = 300
     lineSize = randint(120, 200)
     smallLineSize = lineSize / 4
     lines = []
+    wordsL = []
     gS = 255
 
     # Generate content
@@ -62,7 +65,7 @@ def make_page(imageIndex):
             gS = wgS
         _, _, w, h = box
         if x + w >= 2480:
-            x = 0
+            x = 30
             lines.append(y)
             y += lineSize
         if y >= 3508 - lineSize:
@@ -72,10 +75,19 @@ def make_page(imageIndex):
         if wordimg is None:
             continue
         # Paste word image onto page
-        page.paste(wordimg, (x, y - h + randint(-20, 20)), wordimg)
+        rn=randint(-20, 20)
+        wordsL.append({
+            'text': transcript, 
+            'x':x, 
+            'y':y-h+rn,
+            'w': w,
+            'h': h})
+        page.paste(wordimg, (x, y - h + rn), wordimg)
         x += w + randint(-10, 30)
 
     page.save(f"{nolines_dir}/{imageIndex}-page.png")
+    with open(f"{json_dir}/{imageIndex}.json", mode='w') as jsonfile:
+        json.dump(wordsL, jsonfile)
     # Draw lines
     for y in lines:
         for j in range(4):
@@ -87,6 +99,6 @@ def make_page(imageIndex):
 
 if __name__ == '__main__':
     # Parallelize page generation
-    num_pages = 200
+    num_pages = 1000
     with Pool() as pool:
         list(tqdm.tqdm(pool.imap(make_page, range(num_pages)), total=num_pages))

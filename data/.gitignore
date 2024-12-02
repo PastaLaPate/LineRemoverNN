@@ -2,4 +2,6 @@
 /IAM_WORDS.zip
 /generated-pages/
 /generated-nolines-pages/
+/generated-words/
 /words.tgz
+*.pyc

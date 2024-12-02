@@ -1,0 +1,1 @@
+from IAM import split_into_blocks

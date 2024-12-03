@@ -8,7 +8,7 @@ from torch.utils.data import DataLoader
 import torch.nn as nn
 from mltu.utils.text_utils import ctc_decoder, get_cer
 import torchvision.transforms as transforms
-from WordRecogniser.inf import infer
+#from WordRecogniser.inf import infer
 from tqdm import tqdm
 device = (
     "cuda"

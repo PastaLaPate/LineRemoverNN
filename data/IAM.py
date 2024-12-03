@@ -14,7 +14,7 @@ import tqdm
 import math
 from mltu.utils.text_utils import ctc_decoder, get_cer
 sys.path.append('../../')
-from WordRecogniser.inf import infer
+#from WordRecogniser.inf import infer
 
 device = (
     "cuda"
@@ -132,10 +132,10 @@ if __name__=='__main__':
             
             slicedLines = linesImg[y:y+h, x:x+w]
             slicedNoLines = img[y:y+h, x:x+w]
-            predictedLines = infer(slicedLines)
-            predictedNoLines = infer(slicedNoLines)
-            cerLines += get_cer(predictedLines, word['text'])
-            cerNoLines += get_cer(predictedNoLines, word['text'])
+            #predictedLines = infer(slicedLines)
+            #predictedNoLines = infer(slicedNoLines)
+            #cerLines += get_cer(predictedLines, word['text'])
+            #cerNoLines += get_cer(predictedNoLines, word['text'])
             #cv2.putText(img, predictedNoLines, (x, y-10), cv2.FONT_HERSHEY_SIMPLEX, 2, (0, 0, 255), 5, cv2.LINE_AA)
             #cv2.putText(linesImg, predictedLines, (x, y-10), cv2.FONT_HERSHEY_SIMPLEX, 2, (0, 0, 255), 5, cv2.LINE_AA)
             #cv2.rectangle(img, (x, y), (x+w, y+h), color=(255, 0, 0), thickness=3)

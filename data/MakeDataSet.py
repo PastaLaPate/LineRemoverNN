@@ -7,6 +7,7 @@ from functools import lru_cache
 from multiprocessing import Pool
 import json
 import os
+import argparse
 
 # Load word metadata
 words = []
@@ -22,9 +23,10 @@ with open('./words.txt', encoding='UTF-8', mode='r') as words_file:
         path = f"./words/{fnamesplit[0]}/{'-'.join(fnamesplit[:2])}/{filename}.png"
         words.append((path, (int(x), int(y), int(w), int(h)), transcript, int(grayScale)))
 
-pages_dir = '/mnt/c/users/alexa/DatasetData/generated-pages/'
-nolines_dir = '/mnt/c/users/alexa/DatasetData/generated-nolines-pages/'
-json_dir = '/mnt/c/users/alexa/DatasetData/generated-words/'
+data_dir = './'
+pages_dir = os.path.join(data_dir, 'generated-pages')
+nolines_dir = os.path.join(data_dir, 'generated-nolines-pages')
+json_dir = os.path.join(data_dir, 'generated-words')
 
 if not (os.path.exists(pages_dir) and os.path.exists(nolines_dir) and os.path.exists(json_dir)):
     os.mkdir(pages_dir)
@@ -105,6 +107,13 @@ def make_page(imageIndex):
 
 if __name__ == '__main__':
     # Parallelize page generation
-    num_pages = 1000
+    parser = argparse.ArgumentParser(prog="Page Generator", description="Generates realistic synthetic pages with and without lines for training")
+    parser.add_argument("-o", '--output', help="Path to output data folders", required=False, default='./')
+    parser.add_argument("-p", '--pages', help='Number of pages to generate', type=int, required=False, default=1000)
+    args = parser.parse_args()
+    if not os.path.exists(args.output):
+        raise ValueError("Output folder does not exist")
+    data_dir = args.output
+    num_pages = args.pages
     with Pool() as pool:
         list(tqdm.tqdm(pool.imap(make_page, range(num_pages)), total=num_pages))

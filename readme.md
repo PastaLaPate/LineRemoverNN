@@ -27,7 +27,7 @@ Run `python processBlock.py --dir [directory where pages are and where will they
 
 ### Train Model
 
-Run `python train.py --epoch [number of epochs to train default: 50] --dataset [dataset path] ?--load[]`
+Run `python train.py --epoch [number of epochs to train default: 50] --dataset [dataset path] ?--load[Load or not the best saved model]`
 
 ## Inspiration
 

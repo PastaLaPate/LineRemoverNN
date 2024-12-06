@@ -4,7 +4,7 @@ import cv2
 from torchvision.transforms import ToTensor, ToPILImage
 from multiprocessing import Pool
 from tqdm import tqdm
-
+import argparse
 
 # Process a single file
 def process_file(args):
@@ -31,10 +31,19 @@ def process_folder(folderPath, newFolderPath):
 
 if __name__ == '__main__':
     # Process folders with multiprocessing
-    pages_dir = '/mnt/c/users/alexa/DatasetData/generated-pages/'
-    nolines_dir = '/mnt/c/users/alexa/DatasetData/generated-nolines-pages/'
-    pages_blocks_dir = '/mnt/c/users/alexa/DatasetData/generated-pages-blocks/'
-    nolines_blocks_dir = '/mnt/c/users/alexa/DatasetData/generated-nolines-pages-blocks/'
+    #pages_dir = '/mnt/c/users/alexa/DatasetData/generated-pages/'
+    #nolines_dir = '/mnt/c/users/alexa/DatasetData/generated-nolines-pages/'
+    #pages_blocks_dir = '/mnt/c/users/alexa/DatasetData/generated-pages-blocks/'
+    #nolines_blocks_dir = '/mnt/c/users/alexa/DatasetData/generated-nolines-pages-blocks/'
+    data_dir = './'
+    parser = argparse.ArgumentParser(prog="Page splitter",description="Split pages into blocks of 512x512")    
+    parser.add_argument("-d", "--dir", default="./")
+    args = parser.parse_args()
+    data_dir = args.dir
+    nolines_dir = os.path.join(data_dir, 'generated-nolines-pages')
+    pages_dir = os.path.join(data_dir, 'generated-pages')
+    nolines_blocks_dir = os.path.join(data_dir, 'generated-pages-blocks')
+    pages_blocks_dir = os.path.join(data_dir, 'generated-nolines-pages-blocks')
     if not (os.path.exists(nolines_blocks_dir) or os.path.exists(pages_blocks_dir)):
         os.mkdir(pages_blocks_dir)
         os.mkdir(nolines_blocks_dir)

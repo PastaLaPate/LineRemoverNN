@@ -1,16 +1,33 @@
 # Line Remover NN
 
 ## Introduction
+
 This repos uses PyTorch to remove ruled lines from an image.
-The goal of this model is to make easier the word recognition from OCR 
+The goal of this model is to make easier the word recognition from OCR
 
 ## Usage
+
 ### Install Requirements
+
 `python -m pip install -r requirements.txt`
+
 ### Install IAM Dataset
+
 First go to `/data/` and run `python downloadData.py`
+
 ### Preprocess the data (generated pages and split pages to blocks)
 
+#### Generate synthetic pages
+
+Stay in `/data/` directory and run `python MakeDataset.py --output [output default: ./] --pages [number of pages to generate default: 1000]`
+
+#### Split pages into blocks (of 512x512)
+
+Run `python processBlock.py --dir [directory where pages are and where will they be generated default: ./]`
+
+### Train Model
+
+Run `python train.py --epoch [number of epochs to train default: 50] --dataset [dataset path] ?--load[]`
 
 ## Inspiration
 

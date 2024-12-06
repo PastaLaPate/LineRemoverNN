@@ -33,6 +33,7 @@ if __name__ == '__main__':
     argsParser = ArgumentParser(prog="LinerRemoverNN - Trainer", description="A trainer for the model")
     argsParser.add_argument("-e", "--epoch", type=int, help="The number of epoch to train the model on", required=True)
     argsParser.add_argument("-d", "--dataset", help="Dataset location", required=True)
+    argsParser.add_argument("-l", "--load", help="Load the best model", action="store_true", default=False)
     args = argsParser.parse_args()
 
     data_dir = args.dataset
@@ -48,7 +49,26 @@ if __name__ == '__main__':
     optimizer = torch.optim.Adam(network.parameters(), lr=1e-4)
     epochs = args.epoch
     loss = nn.MSELoss()
-    for epoch in range(epochs):
+    startingEpoch = 0
+    
+    if args.load:
+        bestModelPath = None
+        bestModelEpoch = 0
+        for model in os.listdir('./models/saved/'):
+            # epoch-x.pt
+            modelEpoch = model[6:].split('.')[0]
+            modelEpoch = int(modelEpoch)
+            if modelEpoch > bestModelEpoch:
+                bestModelEpoch = modelEpoch
+                bestModelPath = f"./models/saved/epoch-{bestModelEpoch}.pt"
+        
+        if bestModelPath:
+            print(f"Loading model path: {bestModelPath}")
+            startingEpoch = bestModelEpoch+1
+            network.load_state_dict(torch.load(bestModelPath, weights_only=True))
+    
+    
+    for epoch in range(startingEpoch, epochs):
         torch.cuda.empty_cache()
         network.train()
         totalLoss = 0

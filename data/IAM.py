@@ -109,6 +109,39 @@ class IAMPages(Dataset):
         if self.target_transform:
             sample = self.target_transform(sample)
         return sample
+    
+
+class IAMPagesSplitted(Dataset):
+    def __init__(self, lines_pages_dir, nolines_pages_dir, json_dir, transform=None, target_transform=None, readJson=False):
+        self.lines_pages_dir = lines_pages_dir
+        self.nolines_pages_dir = nolines_pages_dir
+        self.json_dir = json_dir
+        self.transform = transform
+        self.target_transform = target_transform
+        self.readJson = readJson
+        if not (len(os.listdir(self.lines_pages_dir)) == len(os.listdir(self.nolines_pages_dir))):
+            raise Exception("Not same number of files in each directory")
+    
+    def __len__(self):
+        return len(os.listdir(self.lines_pages_dir))
+    
+    def __getitem__(self, index):
+        linesImagePath = os.path.join(self.lines_pages_dir, f"{index}.png")
+        noLinesImagePath = os.path.join(self.nolines_pages_dir, f"{index}.png")
+        jsonPath = os.path.join(self.json_dir, f"{index}.json")
+        linesImage = read_image(linesImagePath, torchvision.io.ImageReadMode.GRAY).float() / 255.0
+        noLinesImage = read_image(noLinesImagePath, torchvision.io.ImageReadMode.GRAY).float() / 255.0
+        jsonRead = []
+        if self.readJson:
+            with open(jsonPath, 'r') as json_file:
+                jsonRead = json.load(json_file)
+        if self.transform:
+            linesImage = self.transform(linesImage)
+            noLinesImage = self.transform(noLinesImage)
+        sample = {'lines': linesImage, 'noLines': noLinesImage, 'jsonData': jsonRead, 'shape': linesImage.shape}
+        if self.target_transform:
+            sample = self.target_transform(sample)
+        return sample
 
 if __name__=='__main__':
     pages_dir = './generated-pages/'

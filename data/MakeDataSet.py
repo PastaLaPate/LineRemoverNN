@@ -6,6 +6,7 @@ import tqdm
 from functools import lru_cache
 from multiprocessing import Pool
 import json
+import os
 
 # Load word metadata
 words = []
@@ -21,9 +22,14 @@ with open('./words.txt', encoding='UTF-8', mode='r') as words_file:
         path = f"./words/{fnamesplit[0]}/{'-'.join(fnamesplit[:2])}/{filename}.png"
         words.append((path, (int(x), int(y), int(w), int(h)), transcript, int(grayScale)))
 
-pages_dir = './generated-pages/'
-nolines_dir = './generated-nolines-pages/'
-json_dir = './generated-words/'
+pages_dir = '/mnt/c/users/alexa/DatasetData/generated-pages/'
+nolines_dir = '/mnt/c/users/alexa/DatasetData/generated-nolines-pages/'
+json_dir = '/mnt/c/users/alexa/DatasetData/generated-words/'
+
+if not (os.path.exists(pages_dir) and os.path.exists(nolines_dir) and os.path.exists(json_dir)):
+    os.mkdir(pages_dir)
+    os.mkdir(nolines_dir)
+    os.mkdir(json_dir)
 
 # Transparent background function
 def makeTransparentBG(img):

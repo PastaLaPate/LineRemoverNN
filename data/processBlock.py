@@ -31,5 +31,12 @@ def process_folder(folderPath, newFolderPath):
 
 if __name__ == '__main__':
     # Process folders with multiprocessing
-    process_folder('./generated-pages', './generated-pages-blocks')
-    process_folder('./generated-nolines-pages', './generated-nolines-pages-blocks')
+    pages_dir = '/mnt/c/users/alexa/DatasetData/generated-pages/'
+    nolines_dir = '/mnt/c/users/alexa/DatasetData/generated-nolines-pages/'
+    pages_blocks_dir = '/mnt/c/users/alexa/DatasetData/generated-pages-blocks/'
+    nolines_blocks_dir = '/mnt/c/users/alexa/DatasetData/generated-nolines-pages-blocks/'
+    if not (os.path.exists(nolines_blocks_dir) or os.path.exists(pages_blocks_dir)):
+        os.mkdir(pages_blocks_dir)
+        os.mkdir(nolines_blocks_dir)
+    process_folder(pages_dir, pages_blocks_dir)
+    process_folder(nolines_dir, nolines_blocks_dir)

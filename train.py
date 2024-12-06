@@ -2,7 +2,7 @@
 import sys
 sys.path.append('../')
 import torch
-from data.IAM import IAMPages, reconstruct_image
+from data.IAM import IAMPages, reconstruct_image, IAMPagesSplitted
 from models.model import NeuralNetwork
 from torch.utils.data import DataLoader
 import torch.nn as nn
@@ -22,22 +22,18 @@ def collate_fn(batch):
     # Extract and stack tensors for lines, noLines, etc.
     linesImages = torch.stack([item['lines'] for item in batch])
     noLines = torch.stack([item['noLines'] for item in batch])
-    jsonDatas = [item['jsonData'] for item in batch]
     shapes = [item['shape'] for item in batch]
-    return linesImages, noLines, jsonDatas, shapes
+    return linesImages, noLines, shapes
 
-pages_dir = './data/generated-pages/'
-nolines_dir = './data/generated-nolines-pages/'
-json_dir = './data/generated-words/'
+pages_dir = '/mnt/c/users/alexa/DatasetData/generated-pages/'
+nolines_dir = '/mnt/c/users/alexa/DatasetData/generated-nolines-pages/'
+pages_blocks_dir = '/mnt/c/users/alexa/DatasetData/generated-pages-blocks/'
+nolines_blocks_dir = '/mnt/c/users/alexa/DatasetData/generated-nolines-pages-blocks/'
 
 if __name__ == '__main__':
     network = NeuralNetwork().to(device)
-    dataset = IAMPages(pages_dir, nolines_dir, json_dir, random=False, splitSquare=True, transform=transforms.Compose([
-        lambda x: x.permute(1, 2, 0).numpy(),
-        transforms.ToPILImage(mode='RGBA'),
-        transforms.Grayscale(),
-        transforms.ToTensor()]))
-    dataloader = DataLoader(dataset, batch_size=64, shuffle=True, collate_fn=collate_fn, num_workers=8)
+    dataset = IAMPagesSplitted(pages_blocks_dir, nolines_blocks_dir, '', readJson=False)
+    dataloader = DataLoader(dataset, batch_size=10, shuffle=True, collate_fn=collate_fn, num_workers=8)
     optimizer = torch.optim.Adam(network.parameters(), lr=1e-4)
     epochs = 50
     loss = nn.MSELoss()
@@ -47,7 +43,7 @@ if __name__ == '__main__':
         totalLoss = 0
         
         for batch in tqdm(dataloader):
-            linesImages, noLines, jsonDatas, shapes = batch
+            linesImages, noLines, shapes = batch
             linesImages, noLines = linesImages.to(device), noLines.to(device)
             processedImages = network(linesImages)
         

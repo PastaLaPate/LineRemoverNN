@@ -119,6 +119,8 @@ class IAMPagesSplitted(Dataset):
         self.transform = transform
         self.target_transform = target_transform
         self.readJson = readJson
+        if not (os.path.exists(lines_pages_dir) or os.path.exists(nolines_pages_dir) or os.path.exists(json_dir)):
+            raise Exception("The provided folders do not exists")
         if not (len(os.listdir(self.lines_pages_dir)) == len(os.listdir(self.nolines_pages_dir))):
             raise Exception("Not same number of files in each directory")
     

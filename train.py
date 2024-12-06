@@ -9,7 +9,9 @@ import torch.nn as nn
 from mltu.utils.text_utils import ctc_decoder, get_cer
 import torchvision.transforms as transforms
 #from WordRecogniser.inf import infer
+from argparse import ArgumentParser
 from tqdm import tqdm
+import os
 device = (
     "cuda"
     if torch.cuda.is_available()
@@ -25,17 +27,26 @@ def collate_fn(batch):
     shapes = [item['shape'] for item in batch]
     return linesImages, noLines, shapes
 
-pages_dir = '/mnt/c/users/alexa/DatasetData/generated-pages/'
-nolines_dir = '/mnt/c/users/alexa/DatasetData/generated-nolines-pages/'
-pages_blocks_dir = '/mnt/c/users/alexa/DatasetData/generated-pages-blocks/'
-nolines_blocks_dir = '/mnt/c/users/alexa/DatasetData/generated-nolines-pages-blocks/'
+data_dir = './'
 
 if __name__ == '__main__':
+    argsParser = ArgumentParser(prog="LinerRemoverNN - Trainer", description="A trainer for the model")
+    argsParser.add_argument("-e", "--epoch", type=int, help="The number of epoch to train the model on", required=True)
+    argsParser.add_argument("-d", "--dataset", help="Dataset location", required=True)
+    args = argsParser.parse_args()
+
+    data_dir = args.dataset
+    pages_dir = os.path.join(data_dir, 'generated-pages')
+    nolines_dir = os.path.join(data_dir, 'generated-nolines-pages')
+    json_dir = os.path.join(data_dir, 'generated-words')
+    pages_blocks_dir = os.path.join(data_dir, 'generated-pages-blocks')
+    nolines_blocks_dir = os.path.join(data_dir, 'generated-nolines-pages-blocks')
+
     network = NeuralNetwork().to(device)
     dataset = IAMPagesSplitted(pages_blocks_dir, nolines_blocks_dir, '', readJson=False)
     dataloader = DataLoader(dataset, batch_size=10, shuffle=True, collate_fn=collate_fn, num_workers=8)
     optimizer = torch.optim.Adam(network.parameters(), lr=1e-4)
-    epochs = 50
+    epochs = args.epoch
     loss = nn.MSELoss()
     for epoch in range(epochs):
         torch.cuda.empty_cache()

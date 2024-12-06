@@ -24,9 +24,6 @@ with open('./words.txt', encoding='UTF-8', mode='r') as words_file:
         words.append((path, (int(x), int(y), int(w), int(h)), transcript, int(grayScale)))
 
 data_dir = './'
-pages_dir = os.path.join(data_dir, 'generated-pages')
-nolines_dir = os.path.join(data_dir, 'generated-nolines-pages')
-json_dir = os.path.join(data_dir, 'generated-words')
 
 if not (os.path.exists(pages_dir) and os.path.exists(nolines_dir) and os.path.exists(json_dir)):
     os.mkdir(pages_dir)
@@ -111,9 +108,13 @@ if __name__ == '__main__':
     parser.add_argument("-o", '--output', help="Path to output data folders", required=False, default='./')
     parser.add_argument("-p", '--pages', help='Number of pages to generate', type=int, required=False, default=1000)
     args = parser.parse_args()
+    
     if not os.path.exists(args.output):
         raise ValueError("Output folder does not exist")
     data_dir = args.output
+    pages_dir = os.path.join(data_dir, 'generated-pages')
+    nolines_dir = os.path.join(data_dir, 'generated-nolines-pages')
+    json_dir = os.path.join(data_dir, 'generated-words')
     num_pages = args.pages
     with Pool() as pool:
         list(tqdm.tqdm(pool.imap(make_page, range(num_pages)), total=num_pages))

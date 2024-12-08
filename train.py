@@ -67,6 +67,8 @@ if __name__ == '__main__':
             startingEpoch = bestModelEpoch+1
             network.load_state_dict(torch.load(bestModelPath, weights_only=True))
     
+    if not os.path.exists(os.path.join('./models', 'saved')):
+        os.mkdir(os.path.join('./models', 'saved'))
     
     for epoch in range(startingEpoch, epochs):
         torch.cuda.empty_cache()
@@ -76,9 +78,17 @@ if __name__ == '__main__':
         for batch in tqdm(dataloader):
             linesImages, noLines, shapes = batch
             linesImages, noLines = linesImages.to(device), noLines.to(device)
-            processedImages = network(linesImages)
-        
-            pixelLoss = loss(processedImages, noLines)
+            processedFilters = network(linesImages)
+            combinedFilter = torch.sum(processedFilters, dim=1, keepdim=True)  # Shape: [10, 1, 512, 512]
+
+        # Ensure the combinedFilter is normalized if needed (optional)
+            combinedFilter = combinedFilter / processedFilters.shape[1]
+
+            # Subtract the composite filter from the input
+            filteredImage = linesImages - combinedFilter  # Shape: [10, 1, 512, 512]
+            
+            # Compute loss between the subtracted image and the target (noLines)
+            pixelLoss = loss(filteredImage, noLines)
             optimizer.zero_grad()
             batch_loss = pixelLoss.clone().detach().requires_grad_(True)
             batch_loss.backward()

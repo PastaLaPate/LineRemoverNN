@@ -11,24 +11,22 @@ import argparse
 
 # Load word metadata
 words = []
-with open('./words.txt', encoding='UTF-8', mode='r') as words_file:
+with open("./words.txt", encoding="UTF-8", mode="r") as words_file:
     for line in words_file:
         line = line.rstrip()
-        if line.startswith('#') or len(line.split(' ')) > 9:
+        if line.startswith("#") or len(line.split(" ")) > 9:
             continue
-        filename, segmentation, grayScale, x, y, w, h, typ, transcript = line.split(' ')
-        if segmentation == 'err':
+        filename, segmentation, grayScale, x, y, w, h, typ, transcript = line.split(" ")
+        if segmentation == "err":
             continue
-        fnamesplit = filename.split('-')
+        fnamesplit = filename.split("-")
         path = f"./words/{fnamesplit[0]}/{'-'.join(fnamesplit[:2])}/{filename}.png"
-        words.append((path, (int(x), int(y), int(w), int(h)), transcript, int(grayScale)))
+        words.append(
+            (path, (int(x), int(y), int(w), int(h)), transcript, int(grayScale))
+        )
 
-data_dir = './'
+data_dir = "./"
 
-if not (os.path.exists(pages_dir) and os.path.exists(nolines_dir) and os.path.exists(json_dir)):
-    os.mkdir(pages_dir)
-    os.mkdir(nolines_dir)
-    os.mkdir(json_dir)
 
 # Transparent background function
 def makeTransparentBG(img):
@@ -37,22 +35,24 @@ def makeTransparentBG(img):
     avg = img_data[..., :3].mean(axis=2)
     mask = avg <= 200
     img_data[..., 3] = mask * 255
-    return PIL.Image.fromarray(img_data, 'RGBA')
+    return PIL.Image.fromarray(img_data, "RGBA")
+
 
 # Cache images with a size limit to reduce repeated loads
 @lru_cache(maxsize=1000)
 def load_image(path):
     """Load and preprocess a word image."""
     try:
-        img = PIL.Image.open(path).convert('RGBA')
+        img = PIL.Image.open(path).convert("RGBA")
         return makeTransparentBG(img)
     except Exception as e:
         print(f"Error loading image {path}: {e}")
         return None
 
+
 def make_page(imageIndex):
     """Generate a single page with random words."""
-    page = PIL.Image.new(mode='RGBA', size=(2480, 3508), color=(255, 255, 255))
+    page = PIL.Image.new(mode="RGBA", size=(2480, 3508), color=(255, 255, 255))
     draw = PIL.ImageDraw.Draw(page)
     x = 30
     y = 300
@@ -80,41 +80,66 @@ def make_page(imageIndex):
         if wordimg is None:
             continue
         # Paste word image onto page
-        rn=randint(-20, 20)
-        wordsL.append({
-            'text': transcript, 
-            'x':x, 
-            'y':y-h+rn,
-            'w': w,
-            'h': h})
+        rn = randint(-20, 20)
+        wordsL.append({"text": transcript, "x": x, "y": y - h + rn, "w": w, "h": h})
         page.paste(wordimg, (x, y - h + rn), wordimg)
         x += w + randint(-10, 30)
 
     page.save(f"{nolines_dir}/{imageIndex}-page.png")
-    with open(f"{json_dir}/{imageIndex}.json", mode='w') as jsonfile:
+    with open(f"{json_dir}/{imageIndex}.json", mode="w") as jsonfile:
         json.dump(wordsL, jsonfile)
     # Draw lines
     for y in lines:
         for j in range(4):
-            draw.line((0, y + smallLineSize * j, 2480, y + smallLineSize * j), (gS - 40, gS - 40, gS - 40), 3)
+            draw.line(
+                (0, y + smallLineSize * j, 2480, y + smallLineSize * j),
+                (gS - 40, gS - 40, gS - 40),
+                3,
+            )
     for j in range(3508 // 60):
         draw.line((j * 60, 0, j * 60, 3508), (gS - 40, gS - 40, gS - 40), 2)
 
     page.save(f"{pages_dir}/{imageIndex}-page.png")
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     # Parallelize page generation
-    parser = argparse.ArgumentParser(prog="Page Generator", description="Generates realistic synthetic pages with and without lines for training")
-    parser.add_argument("-o", '--output', help="Path to output data folders", required=False, default='./')
-    parser.add_argument("-p", '--pages', help='Number of pages to generate', type=int, required=False, default=1000)
+    parser = argparse.ArgumentParser(
+        prog="Page Generator",
+        description="Generates realistic synthetic pages with and without lines for training",
+    )
+    parser.add_argument(
+        "-o",
+        "--output",
+        help="Path to output data folders",
+        required=False,
+        default="./",
+    )
+    parser.add_argument(
+        "-p",
+        "--pages",
+        help="Number of pages to generate",
+        type=int,
+        required=False,
+        default=1000,
+    )
     args = parser.parse_args()
-    
+
     if not os.path.exists(args.output):
         raise ValueError("Output folder does not exist")
     data_dir = args.output
-    pages_dir = os.path.join(data_dir, 'generated-pages')
-    nolines_dir = os.path.join(data_dir, 'generated-nolines-pages')
-    json_dir = os.path.join(data_dir, 'generated-words')
+    pages_dir = os.path.join(data_dir, "generated-pages")
+    nolines_dir = os.path.join(data_dir, "generated-nolines-pages")
+    json_dir = os.path.join(data_dir, "generated-words")
+
+    if not (
+        os.path.exists(pages_dir)
+        and os.path.exists(nolines_dir)
+        and os.path.exists(json_dir)
+    ):
+        os.mkdir(pages_dir)
+        os.mkdir(nolines_dir)
+        os.mkdir(json_dir)
     num_pages = args.pages
     with Pool() as pool:
         list(tqdm.tqdm(pool.imap(make_page, range(num_pages)), total=num_pages))

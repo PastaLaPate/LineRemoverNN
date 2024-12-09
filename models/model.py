@@ -31,7 +31,7 @@ class NeuralNetwork(nn.Module):
             nn.LeakyReLU(),
         )
 
-    def forward(self, x):
+    def forward(self, x):*
         mask = self.network(x)  # Pass input through network to get the mask
         output = x - mask       # Subtract the mask from the input
         return output

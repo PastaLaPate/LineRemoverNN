@@ -2,17 +2,18 @@ import cv2
 import matplotlib.pyplot as plt
 import numpy
 
-a = cv2.imread("test.png", cv2.IMREAD_GRAYSCALE)
-plt.subplot(1, 3, 1)
-plt.title("Original")
-plt.imshow(a, cmap="gray")
-blur = cv2.GaussianBlur(a, (3, 3), 0)
-_, a = cv2.threshold(blur, 0, 5, cv2.THRESH_BINARY_INV)
-b = cv2.morphologyEx(a, cv2.MORPH_CLOSE, numpy.ones((2, 2), numpy.uint8), iterations=2)
-plt.subplot(1, 3, 2)
-plt.title("Thresholded")
-plt.imshow(a, cmap="gray")
-plt.subplot(1, 3, 3)
-plt.title("Dilated")
-plt.imshow(b, cmap="gray")
-plt.show()
+
+def thresholdImage(img):
+    return cv2.threshold(img, 200, 255, cv2.THRESH_BINARY)[1]
+
+
+if __name__ == "__main__":
+    img = cv2.imread("./test.png", cv2.IMREAD_GRAYSCALE)
+    thresholded = thresholdImage(img)
+    plt.subplot(1, 2, 1)
+    plt.title("In")
+    plt.imshow(img, cmap="gray")
+    plt.subplot(1, 2, 2)
+    plt.title("Out")
+    plt.imshow(thresholded, cmap="gray")
+    plt.show()

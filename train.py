@@ -7,16 +7,14 @@ from data.IAM import IAMPages, reconstruct_image, IAMPagesSplitted
 from models.model import NeuralNetwork
 from torch.utils.data import DataLoader
 import torch.nn as nn
-from mltu.utils.text_utils import ctc_decoder, get_cer
-import torchvision.transforms as transforms
+# from mltu.utils.text_utils import ctc_decoder, get_cer
+# import matplotlib.pyplot as plt
 
 # from WordRecogniser.inf import infer
 from argparse import ArgumentParser
 from tqdm import tqdm
 import os
 
-
-writer = SummaryWriter()
 
 device = (
     "cuda"
@@ -55,7 +53,7 @@ def loadBestModel():
     bestModelPath, epochs = getBestModelPath()
     network = NeuralNetwork()
     network.load_state_dict(torch.load(bestModelPath, weights_only=True))
-    print(f"Loading {bestModelPath} which has {epochs} epochs")
+    print(f"[LineRemoverNN] Loading {bestModelPath} which has {epochs+1} epochs")
     return network
 
 
@@ -65,6 +63,7 @@ def init_weights(m):
 
 
 if __name__ == "__main__":
+    writer = SummaryWriter()
     argsParser = ArgumentParser(
         prog="LinerRemoverNN - Trainer", description="A trainer for the model"
     )
@@ -143,10 +142,10 @@ if __name__ == "__main__":
             )  # Shape: [10, 1, 512, 512]
 
             # Subtract the composite filter from the input
-            filteredImage = linesImages - combinedFilter  # Shape: [10, 1, 512, 512]
+            filteredImages = combinedFilter - linesImages  # Shape: [10, 1, 512, 512]
 
             # Compute loss between the subtracted image and the target (noLines)
-            pixelLoss = loss(filteredImage, noLines)
+            pixelLoss = torch.sqrt(loss(filteredImages, noLines))
             optimizer.zero_grad()
             # Back prog
             pixelLoss.backward()
@@ -157,4 +156,4 @@ if __name__ == "__main__":
         # Save each epoch
         writer.add_scalar("Loss/train", totalLoss / len(dataloader), epoch)
         torch.save(network.state_dict(), f"./models/saved/epoch-{epoch}.pt")
-writer.flush()
+    writer.flush()

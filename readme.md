@@ -1,5 +1,11 @@
 # Line Remover NN 🚀
 
+[![PastaLaPate - LineRemoverNN](https://img.shields.io/static/v1?label=PastaLaPate&message=LineRemoverNN&color=blue&logo=github)](https://github.com/PastaLaPate/LineRemoverNN "Go to GitHub repo")
+[![stars - LineRemoverNN](https://img.shields.io/github/stars/PastaLaPate/LineRemoverNN?style=social)](https://github.com/PastaLaPate/LineRemoverNN)
+[![forks - LineRemoverNN](https://img.shields.io/github/forks/PastaLaPate/LineRemoverNN?style=social)](https://github.com/PastaLaPate/LineRemoverNN)
+[![License](https://img.shields.io/badge/License-BSD_3-blue)](#license)
+[![issues - LineRemoverNN](https://img.shields.io/github/issues/PastaLaPate/LineRemoverNN)](https://github.com/PastaLaPate/LineRemoverNN/issues)
+
 ## Introduction
 
 This repos uses PyTorch to remove ruled lines from an image.

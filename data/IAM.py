@@ -96,7 +96,7 @@ def reconstruct_image(blocks, original_height, original_width, block_size=512):
     reconstructed_image = reconstructed_padded_image[
         :, :original_height, :original_width
     ]
-    return (reconstructed_image.permute((1, 2, 0)).float()*255).numpy()
+    return (reconstructed_image.permute((1, 2, 0)).float()).numpy()
 
 
 class IAMPages(Dataset):

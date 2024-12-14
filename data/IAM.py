@@ -4,6 +4,7 @@ import torch
 import json
 from torch.utils.data import Dataset
 import torchvision
+from torch import Tensor
 from torchvision import datasets
 from torchvision.transforms import ToTensor
 import matplotlib.pyplot as plt
@@ -13,7 +14,7 @@ import sys
 import tqdm
 import math
 import numpy as np
-from typing import List
+from typing import List, Union
 from mltu.utils.text_utils import ctc_decoder, get_cer
 
 sys.path.append("../../")
@@ -29,7 +30,7 @@ device = (
 
 
 def split_into_blocks(
-    image: np.ndarray, block_size=512, transform=None
+    image: Union[np.ndarray, Tensor], block_size=512, transform=None
 ) -> List[np.ndarray]:
     """
     ## Split an ndarray into blocks of ``block_size``
@@ -41,6 +42,8 @@ def split_into_blocks(
       List[numpy.ndarray] : the list of each block
     """
     # Get original image dimensions
+    if isinstance(image, np.ndarray):
+        image = ToTensor()(image)
     _, height, width = image.shape  # Assuming (C, H, W)
 
     # Calculate the padded dimensions
@@ -70,7 +73,12 @@ def reconstruct_image(blocks, original_height, original_width, block_size=512):
     padded_width = ((original_width + block_size - 1) // block_size) * block_size
 
     # Create an empty tensor for the padded image
-    _, channels, block_height, block_width = len(blocks), *blocks[0].shape
+    if isinstance(blocks[0], np.ndarray):
+        transform = ToTensor()
+        blocks = [transform(np.reshape(block, (512, 512, 1))) for block in blocks]
+    print(blocks[0].shape)
+    channels, block_height, block_width = blocks[0].shape
+    print("Channels: ", channels, "Padded height:", padded_height, "Padded width:", padded_width)
     reconstructed_padded_image = torch.zeros(
         (channels, padded_height, padded_width), dtype=blocks[0].dtype
     )
@@ -88,7 +96,7 @@ def reconstruct_image(blocks, original_height, original_width, block_size=512):
     reconstructed_image = reconstructed_padded_image[
         :, :original_height, :original_width
     ]
-    return reconstructed_image
+    return (reconstructed_image.permute((1, 2, 0)).float()*255).numpy()
 
 
 class IAMPages(Dataset):

@@ -1,12 +1,12 @@
-from train import loadBestModel
-from torch import Tensor
+from .train import loadBestModel
+from torch import Tensor, mean
 from torchvision.io import read_image
 from torchvision.io.image import ImageReadMode
 from torchvision.transforms import ToTensor
 from typing import List, Union
-from data.IAM import split_into_blocks
+from .data.IAM import split_into_blocks, reconstruct_image
 import torch.cuda as torchc
-from postProcessing import thresholdImage
+from .postProcessing import thresholdImage
 import numpy as np
 import cv2
 
@@ -58,6 +58,8 @@ def processImg(img: Union[str, np.ndarray, Tensor], postProcess=True) -> np.ndar
         if not (len(img.shape) == 2 or img.shape[2] == 1):  # Is Image grayscale
             tensorimg = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
         tensorimg = ToTensor()(img)
+    if isinstance(img, Tensor):
+      tensorimg = img
     tensorimg = tensorimg.to(device)
     if not (
         tensorimg.shape[1] == 512 and tensorimg.shape[2] == 512
@@ -67,6 +69,7 @@ def processImg(img: Union[str, np.ndarray, Tensor], postProcess=True) -> np.ndar
         )
     imgs = tensorimg.unsqueeze(0)  # Add batch dimension
     outputs: Tensor = network(imgs)  # Process img
+    outputs = mean(outputs, dim=1, keepdim=True)
     output: Tensor = outputs.squeeze(0)  # Remove batch dimension
     output = output - tensorimg  # Apply filter
     output = output.detach().cpu()  # Detach and to cpu for conversion
@@ -94,7 +97,7 @@ def splitAndProcessImg(
           - See ``processImg.postProcess``
 
     ### Returns:
-      ``List[numpy.ndarray]``: A list of processed grayscale image arrays, one for each 512x512 block.
+      ``List[numpy.ndarray]``: A list of processed grayscale image arrays, one for each 512x512 block. You can reconstruct the image using data.IAM.reconstruct_image
 
     ### Examples:
     >>> # Using an image path:
@@ -103,16 +106,19 @@ def splitAndProcessImg(
     >>> img = cv2.imread('./largeImage.png', cv2.IMREAD_GRAYSCALE)
     >>> blocks = splitAndProcessImg(img)
     """
-    return processImgs(
-        split_into_blocks(
-            img
-            if isinstance(img, np.ndarray)
-            else cv2.imread(img, cv2.IMREAD_GRAYSCALE),
+    img = img if isinstance(img, np.ndarray) else cv2.imread(img, cv2.IMREAD_GRAYSCALE)
+    img = np.expand_dims(img, 2) if len(img.shape) < 3 else img
+    _, width, height = img.shape
+    blocks = split_into_blocks(
+            img,
             block_size=512,
-        ),
+        )
+    processed = processImgs(blocks
+        ,
         postProcess=postProcess,
     )
 
+    return processed
 
 def processImgs(
     imgs: List[Union[str, np.ndarray, Tensor]], postProcess=True
@@ -136,4 +142,7 @@ def processImgs(
     >>> imgs = [cv2.imread('./img1.png'), cv2.imread('./img2.png')]
     >>> processed_imgs = processImgs(imgs)
     """
-    return [processImg(img, postProcess=postProcess) for img in imgs]
+    returnImgs = []
+    for img in imgs:
+      returnImgs.append(processImg(img, postProcess=postProcess))
+    return returnImgs

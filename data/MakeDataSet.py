@@ -52,53 +52,107 @@ def load_image(path):
 
 def make_page(imageIndex):
     """Generate a single page with random words."""
+
+    # Create a blank page with white background
     page = PIL.Image.new(mode="RGBA", size=(2480, 3508), color=(255, 255, 255))
     draw = PIL.ImageDraw.Draw(page)
+
+    # Initialize variables for positioning
     x = 30
     y = 300
-    lineSize = randint(120, 200)
-    smallLineSize = lineSize / 4
-    lines = []
-    wordsL = []
-    gS = 255
+    lineSize = randint(120, 200)  # Random line height for text
+    smallLinesByLine = randint(4, 7)
+    smallLineSize = lineSize / smallLinesByLine  # Distance between small horizontal lines
+    lines = []  # List to store y-coordinates of lines
+    wordsL = []  # List to store metadata about the words on the page
+    gS = 255  # Grayscale value (used for line color)
 
-    # Generate content
+    # Generate content by iterating through the words list
     for i in range(len(words)):
-        word = words[i % len(words)]
-        path, box, transcript, wgS = word
+        word = words[i % len(words)]  # Cycle through the words list
+        path, box, transcript, wgS = word  # Unpack word details
+
+        # Update grayscale to the darkest word color so far
         if wgS < gS:
             gS = wgS
+
+        # Extract dimensions of the word box
         _, _, w, h = box
+
+        # Move to a new line if the word doesn't fit in the current row
         if x + w >= 2480:
             x = 30
-            lines.append(y)
+            lines.append(y)  # Add current y-coordinate to lines list
             y += lineSize
+
+        # Stop adding words if the page height is exceeded
         if y >= 3508 - lineSize:
             break
-        # Load word image on demand
+
+        # Load the word image
         wordimg = load_image(path)
         if wordimg is None:
             continue
-        # Paste word image onto page
+
+        # Random vertical adjustment for the word placement
         rn = randint(-20, 20)
+        
+        # Add metadata about the word to wordsL list
         wordsL.append({"text": transcript, "x": x, "y": y - h + rn, "w": w, "h": h})
+
+        # Paste the word image onto the page
         page.paste(wordimg, (x, y - h + rn), wordimg)
+
+        # Update x-coordinate for the next word, with a random gap
         x += w + randint(-10, 30)
 
+    # Save the page without lines to a separate directory
     page.save(f"{nolines_dir}/{imageIndex}-page.png")
+
+    # Save word metadata to a JSON file
     with open(f"{json_dir}/{imageIndex}.json", mode="w") as jsonfile:
         json.dump(wordsL, jsonfile)
-    # Draw lines
-    for y in lines:
-        for j in range(4):
-            draw.line(
-                (0, y + smallLineSize * j, 2480, y + smallLineSize * j),
-                (gS - 40, gS - 40, gS - 40),
-                3,
-            )
-    for j in range(3508 // 60):
-        draw.line((j * 60, 0, j * 60, 3508), (gS - 40, gS - 40, gS - 40), 2)
 
+        # Draw horizontal arc-like lines at the stored y-coordinates
+    for y in lines:
+        for j in range(smallLinesByLine):
+            offset = randint(-5, 5)  # Slight randomness for arcs
+            arc_height = randint(30, 50)  # Define a reasonable height for the arcs (higher = rounder, lower = flatter)
+            start, end = (0, 180) if randint(0, 1) == 0 else (180, 0) # 1/2 Chance of reverse arc
+            draw.arc(
+                [
+                    float(0), 
+                    float(y + smallLineSize * j + offset), 
+                    float(2480), 
+                    float(y + smallLineSize * j + offset + arc_height)
+                ],
+                start=start,
+                end=end,
+                fill=(gS - 40, gS - 40, gS - 40),
+                width=3,
+            )
+
+    # Draw vertical lines with slight arcs to break regularity
+    for j in range(2480 // 60):  # Iterate over the page width
+        vertical_x = j * 60
+        arc_width = randint(30, 50)  # Define the width of the arc
+        start, end = (90, 270) if randint(0, 1) == 0 else (270, 90) # 1/2 Chance of reverse arc
+        draw.arc(
+            [
+                float(vertical_x - arc_width), 
+                float(0), 
+                float(vertical_x + arc_width), 
+                float(3508)
+            ],
+            start=start,
+            end=end,
+            fill=(gS - 40, gS - 40, gS - 40),
+            width=2,
+        )
+
+
+
+    # Save the final page with lines to the pages directory
     page.save(f"{pages_dir}/{imageIndex}-page.png")
 
 

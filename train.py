@@ -3,8 +3,8 @@ import sys
 sys.path.append("../")
 import torch
 from torch.utils.tensorboard import SummaryWriter
-from data.IAM import IAMPages, reconstruct_image, IAMPagesSplitted
-from models.model import NeuralNetwork
+from .data.IAM import IAMPages, reconstruct_image, IAMPagesSplitted
+from .models.model import NeuralNetwork
 from torch.utils.data import DataLoader
 import torch.nn as nn
 # from mltu.utils.text_utils import ctc_decoder, get_cer
@@ -39,13 +39,13 @@ data_dir = "./"
 def getBestModelPath():
     bestModelPath = None
     bestModelEpoch = 0
-    for model in os.listdir("./models/saved/"):
+    for model in os.listdir(os.path.join(os.path.realpath(os.path.dirname(__file__)),"models/saved/")):
         # epoch-x.pt
         modelEpoch = model[6:].split(".")[0]
         modelEpoch = int(modelEpoch)
         if modelEpoch > bestModelEpoch:
             bestModelEpoch = modelEpoch
-            bestModelPath = f"./models/saved/epoch-{bestModelEpoch}.pt"
+            bestModelPath = os.path.join(os.path.realpath(os.path.dirname(__file__)), f"models/saved/epoch-{bestModelEpoch}.pt")
     return bestModelPath, bestModelEpoch
 
 

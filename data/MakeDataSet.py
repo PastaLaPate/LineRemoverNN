@@ -114,11 +114,15 @@ def make_page(imageIndex):
         json.dump(wordsL, jsonfile)
 
         # Draw horizontal arc-like lines at the stored y-coordinates
+    TogglingChance = 5 # So 1/TogglingChance of changing direction of arcs
+    arcToggle = False
     for y in lines:
         for j in range(smallLinesByLine):
             offset = randint(-5, 5)  # Slight randomness for arcs
             arc_height = randint(30, 50)  # Define a reasonable height for the arcs (higher = rounder, lower = flatter)
-            start, end = (0, 180) if randint(0, 1) == 0 else (180, 0) # 1/2 Chance of reverse arc
+            start, end = (0, 180) if arcToggle else (180, 0) # 1/2 Chance of reverse arc
+            if randint(0, TogglingChance) == 0:
+                arcToggle = not arcToggle
             draw.arc(
                 [
                     float(0), 
@@ -133,10 +137,13 @@ def make_page(imageIndex):
             )
 
     # Draw vertical lines with slight arcs to break regularity
+    arcToggle = False
     for j in range(2480 // 60):  # Iterate over the page width
         vertical_x = j * 60
         arc_width = randint(30, 50)  # Define the width of the arc
-        start, end = (90, 270) if randint(0, 1) == 0 else (270, 90) # 1/2 Chance of reverse arc
+        start, end = (90, 270) if arcToggle else (270, 90) # 1/2 Chance of reverse arc
+        if randint(0, TogglingChance) == 0:
+            arcToggle = not arcToggle
         draw.arc(
             [
                 float(vertical_x - arc_width), 

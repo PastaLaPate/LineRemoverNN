@@ -139,7 +139,7 @@ def make_page(imageIndex):
                 start=start,
                 end=end,
                 fill=(gS - 40, gS - 40, gS - 40),
-                width=randint(1, 4),
+                width=randint(1, 6),
             )
 
     # Draw vertical lines with slight arcs to break regularity
@@ -160,7 +160,7 @@ def make_page(imageIndex):
             start=start,
             end=end,
             fill=(gS - 40, gS - 40, gS - 40),
-            width=randint(1, 4),
+            width=randint(1, 6),
         )
 
     # Save the final page with lines to the pages directory

@@ -3,7 +3,9 @@ import matplotlib.pyplot as plt
 import numpy
 
 
-def thresholdImage(img):
+def thresholdImage(img: numpy.ndarray):
+    #plt.imshow(img.transpose([1, 2, 0]), cmap='gray')
+    #plt.show()
     return cv2.threshold(img, 200, 255, cv2.THRESH_BINARY)[1]
 
 

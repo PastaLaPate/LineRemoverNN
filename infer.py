@@ -1,7 +1,7 @@
 import sys
 import os
 
-sys.path.append(os.path.realpath(os.path.dirname(__file__)))
+sys.path.insert(0, os.path.realpath(os.path.dirname(__file__)))
 from train import loadBestModel
 from torch import Tensor, mean
 from torchvision.io import read_image
@@ -80,7 +80,7 @@ def processImg(img: Union[str, np.ndarray, Tensor], postProcess=True) -> np.ndar
     output = output * 255  # * 255 for normalisation between 0 and 255
     outputImage: np.ndarray = output.numpy()  # Convert to numpy aray
     if postProcess:
-        outputImage = thresholdImage(outputImage)  # If postprocess, threshold the image
+        return thresholdImage(outputImage)  # If postprocess, threshold the image
 
     return outputImage
 

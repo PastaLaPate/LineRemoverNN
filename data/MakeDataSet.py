@@ -5,6 +5,8 @@ from random import randint
 import tqdm
 from functools import lru_cache
 from multiprocessing import Pool
+from IAM import split_into_blocks
+from torchvision.transforms import ToTensor, ToPILImage
 import json
 import os
 import argparse
@@ -50,8 +52,9 @@ def load_image(path):
         return None
 
 
-def make_page(imageIndex):
+def make_page(args):
     """Generate a single page with random words."""
+    imageIndex, split = args
 
     # Create a blank page with white background
     page = PIL.Image.new(mode="RGBA", size=(2480, 3508), color=(255, 255, 255))
@@ -110,6 +113,12 @@ def make_page(imageIndex):
 
     # Save the page without lines to a separate directory
     page.save(f"{nolines_dir}/{imageIndex}-page.png")
+    if split:
+        blocks = split_into_blocks(ToTensor()(page))
+        for i, block in enumerate(blocks):
+            ToPILImage()(block).save(
+                os.path.join(nolines_dir_blocks, f"{imageIndex * len(blocks) + i}.png")
+            )
 
     # Save word metadata to a JSON file
     with open(f"{json_dir}/{imageIndex}.json", mode="w") as jsonfile:
@@ -166,6 +175,13 @@ def make_page(imageIndex):
     # Save the final page with lines to the pages directory
     page.save(f"{pages_dir}/{imageIndex}-page.png")
 
+    if split:
+        blocks = split_into_blocks(ToTensor()(page))
+        for i, block in enumerate(blocks):
+            ToPILImage()(block).save(
+                os.path.join(pages_dir_blocks, f"{imageIndex * len(blocks) + i}.png")
+            )
+
 
 if __name__ == "__main__":
     # Parallelize page generation
@@ -188,6 +204,14 @@ if __name__ == "__main__":
         required=False,
         default=1000,
     )
+    parser.add_argument(
+        "-s",
+        "--split",
+        help="Split directly the generated pages",
+        action="store_true",
+        required=False,
+        default=False,
+    )
     args = parser.parse_args()
 
     if not os.path.exists(args.output):
@@ -195,16 +219,17 @@ if __name__ == "__main__":
     data_dir = args.output
     pages_dir = os.path.join(data_dir, "generated-pages")
     nolines_dir = os.path.join(data_dir, "generated-nolines-pages")
+    pages_dir_blocks = os.path.join(data_dir, "generated-pages-blocks")
+    nolines_dir_blocks = os.path.join(data_dir, "generated-nolines-pages-blocks")
     json_dir = os.path.join(data_dir, "generated-words")
 
-    if not (
-        os.path.exists(pages_dir)
-        and os.path.exists(nolines_dir)
-        and os.path.exists(json_dir)
-    ):
-        os.mkdir(pages_dir)
-        os.mkdir(nolines_dir)
-        os.mkdir(json_dir)
+    for dir in [pages_dir, nolines_dir, pages_dir_blocks, nolines_dir_blocks]:
+        if not os.path.exists(dir):
+            os.mkdir(dir)
     num_pages = args.pages
+    split = args.split  # Get the 'split' argument value
+
+    # Create a list of arguments for each page
+    page_args = [(i, split) for i in range(num_pages)]
     with Pool() as pool:
-        list(tqdm.tqdm(pool.imap(make_page, range(num_pages)), total=num_pages))
+        list(tqdm.tqdm(pool.imap(make_page, page_args), total=num_pages))

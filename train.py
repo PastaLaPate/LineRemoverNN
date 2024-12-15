@@ -7,6 +7,7 @@ from data.IAM import IAMPages, reconstruct_image, IAMPagesSplitted
 from models.model import NeuralNetwork
 from torch.utils.data import DataLoader
 import torch.nn as nn
+from torchvision import transforms
 # from mltu.utils.text_utils import ctc_decoder, get_cer
 # import matplotlib.pyplot as plt
 
@@ -96,7 +97,18 @@ if __name__ == "__main__":
     # Init network, dataset, dataloader, loss, and optimizer
 
     network = NeuralNetwork().to(device)
-    dataset = IAMPagesSplitted(pages_blocks_dir, nolines_blocks_dir, "", readJson=False)
+    dataset = IAMPagesSplitted(
+        pages_blocks_dir,
+        nolines_blocks_dir,
+        "",
+        readJson=False,
+        transform=transforms.Compose(
+            [
+                transforms.RandomRotation(degrees=(0, 180)),
+                transforms.RandomPerspective(distortion_scale=0.6, p=0.75),
+            ]
+        ),
+    )
     dataloader = DataLoader(
         dataset, batch_size=16, shuffle=True, collate_fn=collate_fn, num_workers=8
     )

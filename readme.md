@@ -29,9 +29,9 @@ First go to `/data/` and run `python downloadData.py`
 
 #### Generate synthetic pages
 
-Stay in `/data/` directory and run `python MakeDataset.py --output [output default: ./] --pages [number of pages to generate default: 1000]`
+Stay in `/data/` directory and run `python MakeDataset.py --output [output default: ./] --pages [number of pages to generate default: 1000] --split [split or no directly the pages default: False]`
 
-#### Split pages into blocks (of 512x512)
+#### Split pages into blocks (of 512x512) (Not necessary if --split was specified earlier)
 
 Run `python processBlock.py --dir [directory where pages are and where will they be generated default: ./]`
 

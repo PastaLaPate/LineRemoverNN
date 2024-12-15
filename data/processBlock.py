@@ -38,7 +38,6 @@ if __name__ == "__main__":
     # nolines_dir = '/mnt/c/users/alexa/DatasetData/generated-nolines-pages/'
     # pages_blocks_dir = '/mnt/c/users/alexa/DatasetData/generated-pages-blocks/'
     # nolines_blocks_dir = '/mnt/c/users/alexa/DatasetData/generated-nolines-pages-blocks/'
-    data_dir = "./"
     parser = argparse.ArgumentParser(
         prog="Page splitter", description="Split pages into blocks of 512x512"
     )

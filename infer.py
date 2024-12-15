@@ -1,12 +1,16 @@
-from .train import loadBestModel
+import sys
+import os
+
+sys.path.append(os.path.realpath(os.path.dirname(__file__)))
+from train import loadBestModel
 from torch import Tensor, mean
 from torchvision.io import read_image
 from torchvision.io.image import ImageReadMode
 from torchvision.transforms import ToTensor
 from typing import List, Union
-from .data.IAM import split_into_blocks, reconstruct_image
+from data.IAM import split_into_blocks, reconstruct_image
 import torch.cuda as torchc
-from .postProcessing import thresholdImage
+from postProcessing import thresholdImage
 import numpy as np
 import cv2
 
@@ -59,7 +63,7 @@ def processImg(img: Union[str, np.ndarray, Tensor], postProcess=True) -> np.ndar
             tensorimg = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
         tensorimg = ToTensor()(img)
     if isinstance(img, Tensor):
-      tensorimg = img
+        tensorimg = img
     tensorimg = tensorimg.to(device)
     if not (
         tensorimg.shape[1] == 512 and tensorimg.shape[2] == 512
@@ -110,15 +114,16 @@ def splitAndProcessImg(
     img = np.expand_dims(img, 2) if len(img.shape) < 3 else img
     _, width, height = img.shape
     blocks = split_into_blocks(
-            img,
-            block_size=512,
-        )
-    processed = processImgs(blocks
-        ,
+        img,
+        block_size=512,
+    )
+    processed = processImgs(
+        blocks,
         postProcess=postProcess,
     )
 
     return processed
+
 
 def processImgs(
     imgs: List[Union[str, np.ndarray, Tensor]], postProcess=True
@@ -144,5 +149,5 @@ def processImgs(
     """
     returnImgs = []
     for img in imgs:
-      returnImgs.append(processImg(img, postProcess=postProcess))
+        returnImgs.append(processImg(img, postProcess=postProcess))
     return returnImgs

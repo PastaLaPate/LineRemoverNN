@@ -62,7 +62,9 @@ def make_page(imageIndex):
     y = 300
     lineSize = randint(120, 200)  # Random line height for text
     smallLinesByLine = randint(4, 7)
-    smallLineSize = lineSize / smallLinesByLine  # Distance between small horizontal lines
+    smallLineSize = (
+        lineSize / smallLinesByLine
+    )  # Distance between small horizontal lines
     lines = []  # List to store y-coordinates of lines
     wordsL = []  # List to store metadata about the words on the page
     gS = 255  # Grayscale value (used for line color)
@@ -96,7 +98,7 @@ def make_page(imageIndex):
 
         # Random vertical adjustment for the word placement
         rn = randint(-20, 20)
-        
+
         # Add metadata about the word to wordsL list
         wordsL.append({"text": transcript, "x": x, "y": y - h + rn, "w": w, "h": h})
 
@@ -114,26 +116,30 @@ def make_page(imageIndex):
         json.dump(wordsL, jsonfile)
 
         # Draw horizontal arc-like lines at the stored y-coordinates
-    TogglingChance = 5 # So 1/TogglingChance of changing direction of arcs
+    TogglingChance = 5  # So 1/TogglingChance of changing direction of arcs
     arcToggle = False
     for y in lines:
         for j in range(smallLinesByLine):
             offset = randint(-5, 5)  # Slight randomness for arcs
-            arc_height = randint(30, 50)  # Define a reasonable height for the arcs (higher = rounder, lower = flatter)
-            start, end = (0, 180) if arcToggle else (180, 0) # 1/2 Chance of reverse arc
+            arc_height = randint(
+                30, 50
+            )  # Define a reasonable height for the arcs (higher = rounder, lower = flatter)
+            start, end = (
+                (0, 180) if arcToggle else (180, 0)
+            )  # 1/2 Chance of reverse arc
             if randint(0, TogglingChance) == 0:
                 arcToggle = not arcToggle
             draw.arc(
                 [
-                    float(0), 
-                    float(y + smallLineSize * j + offset), 
-                    float(2480), 
-                    float(y + smallLineSize * j + offset + arc_height)
+                    float(0),
+                    float(y + smallLineSize * j + offset),
+                    float(2480),
+                    float(y + smallLineSize * j + offset + arc_height),
                 ],
                 start=start,
                 end=end,
                 fill=(gS - 40, gS - 40, gS - 40),
-                width=3,
+                width=randint(1, 4),
             )
 
     # Draw vertical lines with slight arcs to break regularity
@@ -141,23 +147,21 @@ def make_page(imageIndex):
     for j in range(2480 // 60):  # Iterate over the page width
         vertical_x = j * 60
         arc_width = randint(30, 50)  # Define the width of the arc
-        start, end = (90, 270) if arcToggle else (270, 90) # 1/2 Chance of reverse arc
+        start, end = (90, 270) if arcToggle else (270, 90)  # 1/2 Chance of reverse arc
         if randint(0, TogglingChance) == 0:
             arcToggle = not arcToggle
         draw.arc(
             [
-                float(vertical_x - arc_width), 
-                float(0), 
-                float(vertical_x + arc_width), 
-                float(3508)
+                float(vertical_x - arc_width),
+                float(0),
+                float(vertical_x + arc_width),
+                float(3508),
             ],
             start=start,
             end=end,
             fill=(gS - 40, gS - 40, gS - 40),
-            width=2,
+            width=randint(1, 4),
         )
-
-
 
     # Save the final page with lines to the pages directory
     page.save(f"{pages_dir}/{imageIndex}-page.png")

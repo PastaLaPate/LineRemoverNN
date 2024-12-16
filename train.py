@@ -8,6 +8,8 @@ from models.model import NeuralNetwork
 from torch.utils.data import DataLoader
 import torch.nn as nn
 from torchvision import transforms
+import torchvision.transforms.v2 as v2
+
 # from mltu.utils.text_utils import ctc_decoder, get_cer
 # import matplotlib.pyplot as plt
 
@@ -104,15 +106,16 @@ if __name__ == "__main__":
         readJson=False,
         transform=transforms.Compose(
             [
-                transforms.RandomRotation(degrees=(0, 180)),
-                transforms.RandomPerspective(distortion_scale=0.6, p=0.75),
+                v2.RandomRotation(degrees=(0, 180)),
+                v2.RandomPerspective(distortion_scale=0.5, p=0.75),
+                v2.ToDtype(torch.float32, scale=True),
             ]
         ),
     )
     dataloader = DataLoader(
         dataset, batch_size=16, shuffle=True, collate_fn=collate_fn, num_workers=8
     )
-    optimizer = torch.optim.Adam(network.parameters(), lr=1e-4)
+    optimizer = torch.optim.Adam(network.parameters(), lr=1e-5)
     epochs = args.epoch
     loss = nn.MSELoss()
     startingEpoch = 0

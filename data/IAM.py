@@ -78,7 +78,14 @@ def reconstruct_image(blocks, original_height, original_width, block_size=512):
         blocks = [transform(np.reshape(block, (512, 512, 1))) for block in blocks]
     print(blocks[0].shape)
     channels, block_height, block_width = blocks[0].shape
-    print("Channels: ", channels, "Padded height:", padded_height, "Padded width:", padded_width)
+    print(
+        "Channels: ",
+        channels,
+        "Padded height:",
+        padded_height,
+        "Padded width:",
+        padded_width,
+    )
     reconstructed_padded_image = torch.zeros(
         (channels, padded_height, padded_width), dtype=blocks[0].dtype
     )
@@ -206,14 +213,10 @@ class IAMPagesSplitted(Dataset):
         linesImagePath = os.path.join(self.lines_pages_dir, f"{index}.png")
         noLinesImagePath = os.path.join(self.nolines_pages_dir, f"{index}.png")
         jsonPath = os.path.join(self.json_dir, f"{index}.json")
-        linesImage = (
-            read_image(linesImagePath, torchvision.io.ImageReadMode.GRAY).float()
-            / 255.0
-        )
-        noLinesImage = (
-            read_image(noLinesImagePath, torchvision.io.ImageReadMode.GRAY).float()
-            / 255.0
-        )
+        linesImage = read_image(
+            linesImagePath, torchvision.io.ImageReadMode.GRAY
+        ).float()
+        noLinesImage = read_image(noLinesImagePath, torchvision.io.ImageReadMode.GRAY)
         jsonRead = []
         if self.readJson:
             with open(jsonPath, "r") as json_file:

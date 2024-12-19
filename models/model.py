@@ -27,11 +27,11 @@ class SpatialTransformer(nn.Module):
 class UNetBlock(nn.Module):
     def __init__(self, in_channels, out_channels, padding=1):
         super(UNetBlock, self).__init__()
-        self.conv1 = nn.Conv2d(in_channels, out_channels, 3, padding=padding)
+        self.conv1 = nn.Conv2d(in_channels, out_channels, (21, 3), padding=padding) # Horizontal focus
         self.bn1 = nn.BatchNorm2d(out_channels)
         self.relu1 = nn.LeakyReLU()
         
-        self.conv2 = nn.Conv2d(out_channels, out_channels, 3, padding=padding)
+        self.conv2 = nn.Conv2d(out_channels, out_channels, (3, 21), padding=padding) # Vertical focus
         self.bn2 = nn.BatchNorm2d(out_channels)
         self.relu2 = nn.LeakyReLU()
 

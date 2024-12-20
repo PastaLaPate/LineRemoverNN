@@ -1,5 +1,7 @@
 import torch
 from torch import nn
+import torch.nn.functional as F
+
 
 device = (
     "cuda"
@@ -12,49 +14,46 @@ print(f"[LineRemoverNN] Using {device} device")
 
 class SpatialTransformer(nn.Module):
     def __init__(self):
-        super(SpatialTransformer, self).__init__()
+        # https://pytorch.org/tutorials/intermediate/spatial_transformer_tutorial.html
+        self.localization = nn.Sequential(
+            nn.Conv2d(1, 8, kernel_size=7),
+            nn.MaxPool2d(2, stride=2),
+            nn.ReLU(True),
+            nn.Conv2d(8, 10, kernel_size=5),
+            nn.MaxPool2d(2, stride=2),
+            nn.ReLU(True)
+        )
 
     def forward(self, x):
-        # This layer would learn to apply a transformation (rotation, scaling, etc.)
-        return F.grid_sample(x, self.get_transform_grid(x), padding_mode='border')
+        xs = self.localization(x)
+        xs = xs.view(-1, 10 * 3 * 3)
+        theta = self.fc_loc(xs)
+        theta = theta.view(-1, 2, 3)
 
-    def get_transform_grid(self, x):
-        # This should return a transformation grid; for simplicity, let's assume no transformation
-        # A better implementation would learn this transformation
-        batch_size, _, height, width = x.size()
-        return F.affine_grid(torch.eye(2, 3).unsqueeze(0).repeat(batch_size, 1, 1), (batch_size, 1, height, width))
+        grid = F.affine_grid(theta, x.size())
+        x = F.grid_sample(x, grid)
+
+        return x
 
 class UNetBlock(nn.Module):
     def __init__(self, in_channels, out_channels, padding=1):
         super(UNetBlock, self).__init__()
-        self.conv1 = nn.Conv2d(in_channels, out_channels, (21, 3), padding=padding) # Horizontal focus
-        self.bn1 = nn.BatchNorm2d(out_channels)
+        self.conv1 = nn.Conv2d(in_channels, out_channels*4, (21, 3), padding=(10, 4)) # Horizontal focus
+        self.bn1 = nn.BatchNorm2d(out_channels*4)
         self.relu1 = nn.LeakyReLU()
         
-        self.conv2 = nn.Conv2d(out_channels, out_channels, (3, 21), padding=padding) # Vertical focus
-        self.bn2 = nn.BatchNorm2d(out_channels)
+        self.conv2 = nn.Conv2d(out_channels*4, out_channels*2, (3, 21), padding=(4, 10)) # Vertical focus
+        self.bn2 = nn.BatchNorm2d(out_channels*2)
         self.relu2 = nn.LeakyReLU()
 
-        self.pool = nn.MaxPool2d(2)
+        self.conv3 = nn.Conv2d(out_channels*2, out_channels, (3, 3), padding=1)
+        self.bn3 = nn.BatchNorm2d(out_channels)
+        self.relu3 = nn.LeakyReLU()
 
     def forward(self, x):
         x = self.relu1(self.bn1(self.conv1(x)))
         x = self.relu2(self.bn2(self.conv2(x)))
-        return self.pool(x)
-
-class UNetDecoderBlock(nn.Module):
-    def __init__(self, in_channels, out_channels):
-        super(UNetDecoderBlock, self).__init__()
-        self.block1 = UNetBlock(in_channels, out_channels, padding=1)
-        self.block2 = UNetBlock(in_channels, out_channels, padding=1)
-
-        self.upconv = nn.ConvTranspose2d(out_channels, out_channels, 2, stride=2)
-
-    def forward(self, x, skip_connection):
-        x = self.block1(x)
-        x = self.block2(x)
-        x = self.upconv(x)
-        x = torch.cat([x, skip_connection], dim=1)  # Skip connection for U-Net
+        x = self.relu3(self.bn3(self.conv3(x)))
         return x
 
 class NeuralNetwork(nn.Module):
@@ -62,13 +61,9 @@ class NeuralNetwork(nn.Module):
     def __init__(self):
         super().__init__()
         self.stn = SpatialTransformer()  # Spatial transformer layer for handling rotation/perspective
-        self.encoder1 = UNetBlock(1, 32)
-        self.encoder2 = UNetBlock(32, 64)
-        self.encoder3 = UNetBlock(64, 128)
-
-        self.decoder1 = UNetDecoderBlock(128 + 64, 64)
-        self.decoder2 = UNetDecoderBlock(64 + 32, 32)
-        self.decoder3 = nn.Conv2d(32, 1, 3, padding=1)  # Output a binary mask
+        self.block1 = UNetBlock(1, 32)
+        self.block2 = UNetBlock(32, 64)
+        self.decoder = nn.Conv2d(64, 1, 5, padding=1)  # Output a binary mask
 
         self.final_activation = nn.Sigmoid()  # For generating a binary mask
 
@@ -77,15 +72,10 @@ class NeuralNetwork(nn.Module):
         x = self.stn(x)
 
         # Encoder (downsampling)
-        enc1 = self.encoder1(x)
-        enc2 = self.encoder2(enc1)
-        enc3 = self.encoder3(enc2)
-
-        # Decoder (upsampling with skip connections)
-        dec1 = self.decoder1(enc3, enc2)
-        dec2 = self.decoder2(dec1, enc1)
-        dec3 = self.decoder3(dec2)
+        block1 = self.block1(x)
+        block2 = self.block2(block1)
+        decoded = self.decoder(block2)
 
         # Apply sigmoid to get the final binary mask
-        mask = self.final_activation(dec3)
+        mask = self.final_activation(decoded)
         return mask

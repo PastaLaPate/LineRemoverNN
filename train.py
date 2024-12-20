@@ -106,6 +106,7 @@ if __name__ == "__main__":
         readJson=False,
         transform=transforms.Compose(
             [
+                # Maybe add random affine https://pytorch.org/vision/main/auto_examples/transforms/plot_transforms_illustrations.html#randomaffine
                 v2.RandomRotation(degrees=(0, 180)),
                 v2.RandomPerspective(distortion_scale=0.5, p=0.75),
                 v2.ToDtype(torch.float32, scale=True),

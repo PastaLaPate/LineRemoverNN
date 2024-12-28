@@ -2,6 +2,7 @@ import sys
 
 sys.path.append("../")
 import torch
+import math
 from torch.utils.tensorboard import SummaryWriter
 from data.IAM import IAMPages, reconstruct_image, IAMPagesSplitted
 from models.model import NeuralNetwork
@@ -11,7 +12,7 @@ from torchvision import transforms
 import torchvision.transforms.v2 as v2
 
 # from mltu.utils.text_utils import ctc_decoder, get_cer
-# import matplotlib.pyplot as plt
+import matplotlib.pyplot as plt
 
 # from WordRecogniser.inf import infer
 from argparse import ArgumentParser
@@ -22,9 +23,7 @@ import os
 device = (
     "cuda"
     if torch.cuda.is_available()
-    else "mps"
-    if torch.backends.mps.is_available()
-    else "cpu"
+    else "mps" if torch.backends.mps.is_available() else "cpu"
 )
 
 
@@ -106,17 +105,20 @@ if __name__ == "__main__":
         readJson=False,
         transform=transforms.Compose(
             [
-                # Maybe add random affine https://pytorch.org/vision/main/auto_examples/transforms/plot_transforms_illustrations.html#randomaffine
-                v2.RandomRotation(degrees=(0, 180)),
-                v2.RandomPerspective(distortion_scale=0.5, p=0.75),
+                # Instead of random rotation + random perspective : Random affine https://pytorch.org/vision/main/auto_examples/transforms/plot_transforms_illustrations.html#randomaffine
+                # v2.RandomRotation(degrees=(0, 180)),
+                # v2.RandomCrop(size=(128, 128)),
+                # v2.RandomPerspective(distortion_scale=0.6, p=0.75),
+                # v2.Resize(size=(512, 512)),
                 v2.ToDtype(torch.float32, scale=True),
             ]
         ),
+        sameTransform=True,
     )
     dataloader = DataLoader(
         dataset, batch_size=16, shuffle=True, collate_fn=collate_fn, num_workers=8
     )
-    optimizer = torch.optim.Adam(network.parameters(), lr=1e-5)
+    optimizer = torch.optim.Adam(network.parameters(), lr=1e-4)
     epochs = args.epoch
     loss = nn.MSELoss()
     startingEpoch = 0
@@ -157,6 +159,7 @@ if __name__ == "__main__":
 
             linesImages, noLines, shapes = batch
             linesImages, noLines = linesImages.to(device), noLines.to(device)
+
             processedFilters = network(linesImages)
             combinedFilter = torch.mean(
                 processedFilters, dim=1, keepdim=True

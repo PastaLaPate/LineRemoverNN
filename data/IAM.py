@@ -7,6 +7,7 @@ import torchvision
 from torch import Tensor
 from torchvision import datasets
 from torchvision.transforms import ToTensor
+import torchvision.transforms.functional as VTF
 import matplotlib.pyplot as plt
 import torch.nn.functional as F
 import cv2
@@ -14,6 +15,7 @@ import sys
 import tqdm
 import math
 import numpy as np
+from random import randint
 from typing import List, Union
 from mltu.utils.text_utils import ctc_decoder, get_cer
 
@@ -23,9 +25,7 @@ sys.path.append("../../")
 device = (
     "cuda"
     if torch.cuda.is_available()
-    else "mps"
-    if torch.backends.mps.is_available()
-    else "cpu"
+    else "mps" if torch.backends.mps.is_available() else "cpu"
 )
 
 
@@ -187,6 +187,7 @@ class IAMPagesSplitted(Dataset):
         transform=None,
         target_transform=None,
         readJson=False,
+        sameTransform=False,
     ):
         self.lines_pages_dir = lines_pages_dir
         self.nolines_pages_dir = nolines_pages_dir
@@ -194,6 +195,7 @@ class IAMPagesSplitted(Dataset):
         self.transform = transform
         self.target_transform = target_transform
         self.readJson = readJson
+        self.sameTransform = sameTransform
         if not (
             os.path.exists(lines_pages_dir)
             or os.path.exists(nolines_pages_dir)
@@ -221,17 +223,14 @@ class IAMPagesSplitted(Dataset):
         if self.readJson:
             with open(jsonPath, "r") as json_file:
                 jsonRead = json.load(json_file)
-        if self.transform:
-            linesImage = self.transform(linesImage)
-            noLinesImage = self.transform(noLinesImage)
+
         sample = {
-            "lines": linesImage,
-            "noLines": noLinesImage,
+            "lines": linesImage.float() / 255.0,
+            "noLines": noLinesImage.float()
+            / 255.0,  # /255 for [0, 1] instead of [0, 255]
             "jsonData": jsonRead,
             "shape": linesImage.shape,
         }
-        if self.target_transform:
-            sample = self.target_transform(sample)
         return sample
 
 

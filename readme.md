@@ -8,7 +8,7 @@
 
 ## Introduction
 
-This repos uses PyTorch to remove ruled lines from an image.
+This repos uses PyTorch to remove ruled lines from an image while reconstructing overlapping characters with lines.
 The goal of this model is to make easier the word recognition from OCR
 
 ![Example](images/Figure_2.png)

@@ -4,6 +4,7 @@ from torchvision.io import read_image
 import torchvision
 import matplotlib.pyplot as plt
 from postProcessing import thresholdImage
+from random import randint
 import argparse
 import cv2
 import torch.nn as nn
@@ -54,9 +55,13 @@ if __name__ == "__main__":
     batchSize = args.batch
     imgs = []
     noLinesImgs = []
-
+    start = randint(
+        1,
+        len(os.listdir(os.path.join(args.data, "generated-pages-blocks")))
+        - numberOfImagesToTest,
+    )
     print("[LineRemoverNN] Loading images...")
-    for i in range(numberOfImagesToTest):
+    for i in range(start, start + numberOfImagesToTest):
         pathImageTest = os.path.join(args.data, f"generated-pages-blocks/{i}.png")
         pathImageNoLineTest = os.path.join(
             args.data, f"generated-nolines-pages-blocks/{i}.png"
@@ -64,11 +69,13 @@ if __name__ == "__main__":
         img = read_image(pathImageTest, torchvision.io.ImageReadMode.GRAY)
         imgNoLine = read_image(pathImageNoLineTest, torchvision.io.ImageReadMode.GRAY)
         if args.show:
-            plt.subplot(5, numberOfImagesToTest, i + 1)
-            plt.title(f"Lines {i}")
+            plt.subplot(5, numberOfImagesToTest, (i - start) + 1)
+            plt.title(f"Lines {(i - start)}")
             plt.imshow(img.squeeze().numpy(), cmap="gray")
-            plt.subplot(5, numberOfImagesToTest, numberOfImagesToTest * 4 + i + 1)
-            plt.title(f"Goal {i}")
+            plt.subplot(
+                5, numberOfImagesToTest, numberOfImagesToTest * 4 + (i - start) + 1
+            )
+            plt.title(f"Goal {(i - start)}")
             plt.imshow(imgNoLine.squeeze().numpy(), cmap="gray")
         img = (img.float() / 255.0).to("cuda")
         imgNoLine = (imgNoLine.float() / 255.0).to("cuda")

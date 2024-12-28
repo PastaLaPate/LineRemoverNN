@@ -223,7 +223,7 @@ if __name__ == "__main__":
     nolines_dir_blocks = os.path.join(data_dir, "generated-nolines-pages-blocks")
     json_dir = os.path.join(data_dir, "generated-words")
 
-    for dir in [pages_dir, nolines_dir, pages_dir_blocks, nolines_dir_blocks]:
+    for dir in [pages_dir, nolines_dir, pages_dir_blocks, nolines_dir_blocks, json_dir]:
         if not os.path.exists(dir):
             os.mkdir(dir)
     num_pages = args.pages

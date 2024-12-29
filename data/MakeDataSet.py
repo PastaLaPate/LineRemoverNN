@@ -155,7 +155,8 @@ def make_page(args):
     gS = 255  # Grayscale value (used for line color)
 
     # Generate content by iterating through the words list
-    for i in range(len(words)):
+    i = randint(0, len(words))
+    while True:
         word = words[i % len(words)]  # Cycle through the words list
         path, box, transcript, wgS = word  # Unpack word details
 

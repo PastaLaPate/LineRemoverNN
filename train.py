@@ -56,7 +56,7 @@ def getBestModelPath():
     return bestModelPath, bestModelEpoch
 
 
-def loadBestModel():
+def loadBestModel() -> NeuralNetwork:
     bestModelPath, epochs = getBestModelPath()
     network = NeuralNetwork()
     network.load_state_dict(torch.load(bestModelPath, weights_only=True))

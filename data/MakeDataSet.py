@@ -1,5 +1,6 @@
 import PIL.Image
 import PIL.ImageDraw
+import PIL.ImageOps
 import numpy as np
 from random import randint
 import tqdm
@@ -7,6 +8,9 @@ from functools import lru_cache
 from multiprocessing import Pool
 from IAM import split_into_blocks
 from torchvision.transforms import ToTensor, ToPILImage
+from random import randint, uniform
+import math
+import time
 import json
 import os
 import argparse
@@ -52,13 +56,91 @@ def load_image(path):
         return None
 
 
+def draw_imperfect_arc(
+    lines_draw,
+    draw,
+    bbox,
+    start,
+    end,
+    fill=(0, 0, 0),
+    width=2,
+    hole_count=140,
+    hole_size_range=(2, 14),
+    outgrowth_count=100,
+    outgrowth_size_range=(1, 10),
+    mask=None,
+):
+    """
+    Draws an imperfect arc with holes and outgrowths, and creates a mask to avoid overlap with text.
+
+    :param draw: Pillow ImageDraw object
+    :param bbox: Bounding box for the arc
+    :param start: Start angle of the arc
+    :param end: End angle of the arc
+    :param fill: Fill color of the arc
+    :param width: Width of the arc
+    :param hole_count: Number of holes to create
+    :param outgrowth_count: Number of outgrowths to add
+    :param mask: Mask to apply the holes (to avoid interfering with words)
+    """
+    # Draw the base arc
+    lines_draw.arc(bbox, start=start, end=end, fill=fill, width=width)
+
+    # If a mask is provided, we will add holes to it
+    for _ in range(hole_count):
+        angle = math.radians(uniform(start, end))
+        center_x = (bbox[0] + bbox[2]) / 2
+        center_y = (bbox[1] + bbox[3]) / 2
+        radius_x = (bbox[2] - bbox[0]) / 2
+        radius_y = (bbox[3] - bbox[1]) / 2
+
+        hole_x = center_x + radius_x * math.cos(angle)
+        hole_y = center_y + radius_y * math.sin(angle)
+        hole_size = randint(*hole_size_range)  # Random hole size
+        draw.ellipse(
+            [
+                hole_x - hole_size,
+                hole_y - hole_size,
+                hole_x + hole_size,
+                hole_y + hole_size,
+            ],
+            fill="white",
+        )
+
+    # Add outgrowths to the main image
+    for _ in range(outgrowth_count):
+        angle = math.radians(uniform(start, end))
+        center_x = (bbox[0] + bbox[2]) / 2
+        center_y = (bbox[1] + bbox[3]) / 2
+        radius_x = (bbox[2] - bbox[0]) / 2
+        radius_y = (bbox[3] - bbox[1]) / 2
+
+        outgrowth_x = center_x + radius_x * math.cos(angle)
+        outgrowth_y = center_y + radius_y * math.sin(angle)
+        outgrowth_size = randint(*outgrowth_size_range)  # Random outgrowth size
+        draw.line(
+            [
+                outgrowth_x,
+                outgrowth_y,
+                outgrowth_x + uniform(-outgrowth_size, outgrowth_size),
+                outgrowth_y + uniform(-outgrowth_size, outgrowth_size),
+            ],
+            fill=fill,
+            width=1,
+        )
+
+
 def make_page(args):
     """Generate a single page with random words."""
     imageIndex, split = args
 
     # Create a blank page with white background
     page = PIL.Image.new(mode="RGBA", size=(2480, 3508), color=(255, 255, 255))
-    draw = PIL.ImageDraw.Draw(page)
+    # draw = PIL.ImageDraw.Draw(page)
+    mask = PIL.Image.new("L", (2480, 3508), 0)  # Create a mask for holes
+    mask_draw = PIL.ImageDraw.Draw(mask)
+    linesImg = PIL.Image.new("L", (2480, 3508), 0)  # Create a blank image for lines
+    lines_draw = PIL.ImageDraw.Draw(linesImg)
 
     # Initialize variables for positioning
     x = 30
@@ -138,7 +220,10 @@ def make_page(args):
             )  # 1/2 Chance of reverse arc
             if randint(0, TogglingChance) == 0:
                 arcToggle = not arcToggle
-            draw.arc(
+
+            draw_imperfect_arc(
+                lines_draw,
+                mask_draw,
                 [
                     float(0),
                     float(y + smallLineSize * j + offset),
@@ -147,8 +232,8 @@ def make_page(args):
                 ],
                 start=start,
                 end=end,
-                fill=(gS - 40, gS - 40, gS - 40),
-                width=randint(1, 6),
+                fill=255,
+                width=randint(1, 3),
             )
 
     # Draw vertical lines with slight arcs to break regularity
@@ -159,7 +244,10 @@ def make_page(args):
         start, end = (90, 270) if arcToggle else (270, 90)  # 1/2 Chance of reverse arc
         if randint(0, TogglingChance) == 0:
             arcToggle = not arcToggle
-        draw.arc(
+
+        draw_imperfect_arc(
+            lines_draw,
+            mask_draw,
             [
                 float(vertical_x - arc_width),
                 float(0),
@@ -168,9 +256,11 @@ def make_page(args):
             ],
             start=start,
             end=end,
-            fill=(gS - 40, gS - 40, gS - 40),
-            width=randint(1, 6),
+            fill=255,
+            width=randint(1, 3),
         )
+    linesImg.paste(PIL.Image.new(mode="L", size=(2480, 3508)), mask=mask)
+    page.paste(PIL.ImageOps.invert(linesImg), mask=linesImg)
 
     # Save the final page with lines to the pages directory
     page.save(f"{pages_dir}/{imageIndex}-page.png")
@@ -230,6 +320,11 @@ if __name__ == "__main__":
     split = args.split  # Get the 'split' argument value
 
     # Create a list of arguments for each page
+    print(f"[LineRemoverNN] [PageGenerator] Generating {num_pages} pages")
     page_args = [(i, split) for i in range(num_pages)]
+    starttime = time.time_ns()
     with Pool() as pool:
         list(tqdm.tqdm(pool.imap(make_page, page_args), total=num_pages))
+    print(
+        f"[LineRemoverNN] [PageGenerator] Finished generating {num_pages} pages in {(time.time_ns() - starttime) / 1e9} seconds"
+    )

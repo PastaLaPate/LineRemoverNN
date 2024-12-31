@@ -64,7 +64,7 @@ def draw_imperfect_arc(
     end,
     fill=(0, 0, 0),
     width=2,
-    hole_count=140,
+    hole_count=100,
     hole_size_range=(2, 14),
     outgrowth_count=100,
     outgrowth_size_range=(1, 10),
@@ -130,13 +130,22 @@ def draw_imperfect_arc(
         )
 
 
+def draw_arc_with_condition(
+    has_imperfect_arcs, draw, lines_draw, mask_draw, bbox, start, end, fill, width
+):
+    if has_imperfect_arcs:
+        return draw_imperfect_arc(lines_draw, mask_draw, bbox, start, end, fill, width)
+    else:
+        return draw.arc(bbox, start=start, end=end, fill=fill, width=width)
+
+
 def make_page(args):
     """Generate a single page with random words."""
     imageIndex, split = args
 
     # Create a blank page with white background
     page = PIL.Image.new(mode="RGBA", size=(2480, 3508), color=(255, 255, 255))
-    # draw = PIL.ImageDraw.Draw(page)
+    draw = PIL.ImageDraw.Draw(page)
     mask = PIL.Image.new("L", (2480, 3508), 0)  # Create a mask for holes
     mask_draw = PIL.ImageDraw.Draw(mask)
     linesImg = PIL.Image.new("L", (2480, 3508), 0)  # Create a blank image for lines
@@ -153,6 +162,7 @@ def make_page(args):
     lines = []  # List to store y-coordinates of lines
     wordsL = []  # List to store metadata about the words on the page
     gS = 255  # Grayscale value (used for line color)
+    hasImperfectArcs = bool(randint(0, 1))  # Randomly decide whether to add arcs
 
     # Generate content by iterating through the words list
     i = randint(0, len(words))
@@ -181,6 +191,7 @@ def make_page(args):
         wordimg = load_image(path)
         if wordimg is None:
             continue
+        i += 1
 
         # Random vertical adjustment for the word placement
         rn = randint(-20, 20)
@@ -222,7 +233,9 @@ def make_page(args):
             if randint(0, TogglingChance) == 0:
                 arcToggle = not arcToggle
 
-            draw_imperfect_arc(
+            draw_arc_with_condition(
+                hasImperfectArcs,
+                draw,
                 lines_draw,
                 mask_draw,
                 [
@@ -246,7 +259,9 @@ def make_page(args):
         if randint(0, TogglingChance) == 0:
             arcToggle = not arcToggle
 
-        draw_imperfect_arc(
+        draw_arc_with_condition(
+            hasImperfectArcs,
+            draw,
             lines_draw,
             mask_draw,
             [

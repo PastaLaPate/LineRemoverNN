@@ -46,7 +46,6 @@ if __name__ == "__main__":
     )
     args = argParser.parse_args()
 
-    print("[LineRemoverNN] Loading model...")
     network = loadBestModel()
     network.eval()
     network.to("cuda")
@@ -60,7 +59,7 @@ if __name__ == "__main__":
         len(os.listdir(os.path.join(args.data, "generated-pages-blocks")))
         - numberOfImagesToTest,
     )
-    print("[LineRemoverNN] Loading images...")
+    print("[LineRemoverNN] [Tester] Loading images...")
     for i in range(start, start + numberOfImagesToTest):
         pathImageTest = os.path.join(args.data, f"generated-pages-blocks/{i}.png")
         pathImageNoLineTest = os.path.join(
@@ -86,11 +85,11 @@ if __name__ == "__main__":
     imgs = torch.stack(imgs)  # Shape: [total_images, 1, height, width]
     noLinesImgs = torch.stack(noLinesImgs)
 
-    print("[LineRemoverNN] Using RMSE Loss...")
+    print("[LineRemoverNN] [Tester] Using RMSE Loss...")
     loss = nn.MSELoss()
 
     startedTime = time.time_ns()
-    print("[LineRemoverNN] Treating images...")
+    print("[LineRemoverNN] [Tester] Treating images...")
     totalLoss = 0
 
     for batchStart in range(0, len(imgs), batchSize):
@@ -132,15 +131,19 @@ if __name__ == "__main__":
 
             pixelLoss = torch.sqrt(loss(output_image, batchNoLinesImgs[idx]))
             if args.loss:
-                print(f"[LineRemoverNN] Image {imgIdx} loss : {pixelLoss.item()}")
+                print(
+                    f"[LineRemoverNN] [Tester] Image {imgIdx} loss : {pixelLoss.item()}"
+                )
                 totalLoss += pixelLoss.item()
 
     elapsedTime = time.time_ns() - startedTime
     elapsedTimeSeconds = elapsedTime / 1e9
-    print(f"[LineRemoverNN] Treated {len(imgs)} images in {elapsedTimeSeconds} seconds")
+    print(
+        f"[LineRemoverNN] [Tester] Treated {len(imgs)} images in {elapsedTimeSeconds} seconds"
+    )
 
     if args.loss:
-        print(f"[LineRemoverNN] Avg loss : {totalLoss / len(imgs)}")
+        print(f"[LineRemoverNN] [Tester] Avg loss : {totalLoss / len(imgs)}")
 
     if args.show:
         plt.subplots_adjust(hspace=0.5)

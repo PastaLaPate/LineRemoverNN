@@ -60,7 +60,9 @@ def loadBestModel() -> NeuralNetwork:
     bestModelPath, epochs = getBestModelPath()
     network = NeuralNetwork()
     network.load_state_dict(torch.load(bestModelPath, weights_only=True))
-    print(f"[LineRemoverNN] Loading {bestModelPath} which has {epochs+1} epochs")
+    print(
+        f"[LineRemoverNN] [Model Loader] Loading {bestModelPath} which has {epochs+1} epochs"
+    )
     return network
 
 
@@ -128,20 +130,7 @@ if __name__ == "__main__":
 
     if args.load:
         # Getting the bestModel
-        bestModelPath = None
-        bestModelEpoch = 0
-        for model in os.listdir("./models/saved/"):
-            # epoch-x.pt
-            modelEpoch = model[6:].split(".")[0]
-            modelEpoch = int(modelEpoch)
-            if modelEpoch > bestModelEpoch:
-                bestModelEpoch = modelEpoch
-                bestModelPath = f"./models/saved/epoch-{bestModelEpoch}.pt"
-
-        if bestModelPath:
-            print(f"Loading model path: {bestModelPath}")
-            startingEpoch = bestModelEpoch + 1
-            network.load_state_dict(torch.load(bestModelPath, weights_only=True))
+        network = loadBestModel()
 
     # Create saved folder if not already created
     if not os.path.exists(os.path.join("./models", "saved")):
@@ -176,8 +165,14 @@ if __name__ == "__main__":
 
             optimizer.step()
             totalLoss += pixelLoss.item()
-        print(f"Epoch : {epoch} Loss : ", totalLoss / len(dataloader))
+        print(
+            f"[LineRemoverNN] [Trainer] Epoch : {epoch}, Average Loss : ",
+            totalLoss / len(dataloader),
+        )
         # Save each epoch
         writer.add_scalar("Loss/train", totalLoss / len(dataloader), epoch)
         torch.save(network.state_dict(), f"./models/saved/epoch-{epoch}.pt")
+        print(
+            f'[LineremoverNN] [Trainer] Model saved at "./models/saved/epoch-{epoch}.pt"'
+        )
     writer.flush()

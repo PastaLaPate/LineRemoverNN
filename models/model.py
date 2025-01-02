@@ -121,11 +121,11 @@ class NeuralNetwork(nn.Module):
         super().__init__()
         self.network = nn.Sequential(
             # Rectangular filter: width = 41, height = 17
-            nn.Conv2d(1, 32, (21, 9), padding=(10, 4)),  # (41-1)/2 Horizontal focus
+            nn.Conv2d(1, 32, (43, 9), padding=(21, 4)),  # (41-1)/2 Horizontal focus
             nn.BatchNorm2d(32),
             nn.LeakyReLU(),
             # RectFilter Transpose: width = 9, height = 21
-            nn.Conv2d(32, 16, (9, 21), padding=(4, 10)),  # Vertical focus
+            nn.Conv2d(32, 16, (9, 43), padding=(4, 21)),  # Vertical focus
             nn.BatchNorm2d(16),
             nn.LeakyReLU(),
             # Standard small filter for fine details

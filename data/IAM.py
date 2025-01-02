@@ -215,10 +215,16 @@ class IAMPagesSplitted(Dataset):
         linesImagePath = os.path.join(self.lines_pages_dir, f"{index}.png")
         noLinesImagePath = os.path.join(self.nolines_pages_dir, f"{index}.png")
         jsonPath = os.path.join(self.json_dir, f"{index}.json")
-        linesImage = read_image(
-            linesImagePath, torchvision.io.ImageReadMode.GRAY
-        ).float()
-        noLinesImage = read_image(noLinesImagePath, torchvision.io.ImageReadMode.GRAY)
+        try:
+            linesImage = read_image(
+                linesImagePath, torchvision.io.ImageReadMode.GRAY
+            ).float()
+            noLinesImage = read_image(
+                noLinesImagePath, torchvision.io.ImageReadMode.GRAY
+            )
+        except Exception as e:
+            print(noLinesImagePath)
+            raise Exception(e.message)
         jsonRead = []
         if self.readJson:
             with open(jsonPath, "r") as json_file:

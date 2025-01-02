@@ -11,12 +11,16 @@ import argparse
 def process_file(args):
     file, folderPath, newFolderPath, idx = args
     if file.endswith(".png"):
-        loadedImg = cv2.imread(os.path.join(folderPath, file))
-        blocks = split_into_blocks(ToTensor()(loadedImg))
-        for i, block in enumerate(blocks):
-            ToPILImage()(block).save(
-                os.path.join(newFolderPath, f"{idx * len(blocks) + i}.png")
-            )
+        try:
+            loadedImg = cv2.imread(os.path.join(folderPath, file))
+            blocks = split_into_blocks(ToTensor()(loadedImg))
+            for i, block in enumerate(blocks):
+                ToPILImage()(block).save(
+                    os.path.join(newFolderPath, f"{idx * len(blocks) + i}.png")
+                )
+        except Exception as e:
+
+            print(file)
 
 
 # Process all files in a folder

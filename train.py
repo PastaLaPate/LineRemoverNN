@@ -130,7 +130,7 @@ if __name__ == "__main__":
 
     if args.load:
         # Getting the bestModel
-        network = loadBestModel()
+        network = loadBestModel().to(device)
 
     # Create saved folder if not already created
     if not os.path.exists(os.path.join("./models", "saved")):

@@ -5,6 +5,7 @@ import torchvision
 import matplotlib.pyplot as plt
 from postProcessing import thresholdImage
 from random import randint
+from torchvision.transforms import ToTensor
 import argparse
 import cv2
 import torch.nn as nn
@@ -130,9 +131,18 @@ if __name__ == "__main__":
                 )
 
             pixelLoss = torch.sqrt(loss(output_image, batchNoLinesImgs[idx]))
+
+            pPLoss = torch.sqrt(
+                loss(
+                    ToTensor()(thresholdImage(final) if args.postprocess else final)
+                    .to("cuda")
+                    .permute(0, 2, 1),
+                    batchNoLinesImgs[idx],
+                )
+            )
             if args.loss:
                 print(
-                    f"[LineRemoverNN] [Tester] Image {imgIdx} loss : {pixelLoss.item()}"
+                    f"[LineRemoverNN] [Tester] Image {imgIdx} loss : {pixelLoss.item()} final loss : {pPLoss.item()}"
                 )
                 totalLoss += pixelLoss.item()
 

@@ -44,8 +44,6 @@ def makeTransparentBG(img):
     return PIL.Image.fromarray(img_data, "RGBA")
 
 
-# Cache images with a size limit to reduce repeated loads
-@lru_cache(maxsize=1000)
 def load_image(path):
     """Load and preprocess a word image."""
     try:
@@ -189,9 +187,9 @@ def make_page(args):
 
         # Load the word image
         wordimg = load_image(path)
+        i += 1
         if wordimg is None:
             continue
-        i += 1
 
         # Random vertical adjustment for the word placement
         rn = randint(-20, 20)

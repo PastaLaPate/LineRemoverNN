@@ -2,7 +2,7 @@ import PIL.Image
 import PIL.ImageDraw
 import PIL.ImageOps
 import numpy as np
-from random import randint
+from random import randint, uniform as randfloat
 import tqdm
 from functools import lru_cache
 from multiprocessing import Pool
@@ -136,21 +136,22 @@ def draw_arc_with_condition(
     else:
         return draw.arc(bbox, start=start, end=end, fill=fill, width=width)
 
-
 def make_page(args):
     """Generate a single page with random words."""
-    imageIndex, split = args
-
+    imageIndex, split, extended = args
+    randomPageSize = lambda: 3000 if not extended else randint(1000, 5000)
+    pageWidth, pageHeight = randomPageSize(), randomPageSize()
     # Create a blank page with white background
-    page = PIL.Image.new(mode="RGBA", size=(2480, 3508), color=(255, 255, 255))
+    page = PIL.Image.new(mode="RGBA", size=(pageWidth, pageHeight), color=(255, 255, 255))
     draw = PIL.ImageDraw.Draw(page)
-    mask = PIL.Image.new("L", (2480, 3508), 0)  # Create a mask for holes
+    mask = PIL.Image.new("L", (pageWidth, pageHeight), 0)  # Create a mask for holes
     mask_draw = PIL.ImageDraw.Draw(mask)
-    linesImg = PIL.Image.new("L", (2480, 3508), 0)  # Create a blank image for lines
+    linesImg = PIL.Image.new("L", (pageWidth, pageHeight), 0)  # Create a blank image for lines
     lines_draw = PIL.ImageDraw.Draw(linesImg)
 
-    # Initialize variables for positioning
-    x = 30
+    # Initialize variables for positioning    
+    randX = lambda: 30 if not extended else (randint(350, 500) if bool(randint(0, 1)) else randint(30, 100))
+    x = randX()
     y = 300
     lineSize = randint(120, 200)  # Random line height for text
     smallLinesByLine = randint(4, 7)
@@ -161,6 +162,8 @@ def make_page(args):
     wordsL = []  # List to store metadata about the words on the page
     gS = 255  # Grayscale value (used for line color)
     hasImperfectArcs = bool(randint(0, 1))  # Randomly decide whether to add arcs
+    skipLineProb = 1/4 if extended else 0 # Probability of skipping one or multiple lines
+    stopX = pageWidth - randX()
 
     # Generate content by iterating through the words list
     i = randint(0, len(words))
@@ -176,13 +179,14 @@ def make_page(args):
         _, _, w, h = box
 
         # Move to a new line if the word doesn't fit in the current row
-        if x + w >= 2480:
-            x = 30
+        if x + w >= pageWidth - stopX:
+            x = randX()
+            stopX = pageWidth - randX()
             lines.append(y)  # Add current y-coordinate to lines list
-            y += lineSize
+            y += lineSize if randint(0, 1) < skipLineProb else lineSize * randint(2, 3)
 
         # Stop adding words if the page height is exceeded
-        if y >= 3508 - lineSize:
+        if y >= pageHeight - lineSize:
             break
 
         # Load the word image
@@ -239,7 +243,7 @@ def make_page(args):
                 [
                     float(0),
                     float(y + smallLineSize * j + offset),
-                    float(2480),
+                    float(pageWidth),
                     float(y + smallLineSize * j + offset + arc_height),
                 ],
                 start=start,
@@ -250,7 +254,7 @@ def make_page(args):
 
     # Draw vertical lines with slight arcs to break regularity
     arcToggle = False
-    for j in range(2480 // 60):  # Iterate over the page width
+    for j in range(pageWidth // 60):  # Iterate over the page width
         vertical_x = j * 60
         arc_width = randint(30, 50)  # Define the width of the arc
         start, end = (90, 270) if arcToggle else (270, 90)  # 1/2 Chance of reverse arc
@@ -266,14 +270,14 @@ def make_page(args):
                 float(vertical_x - arc_width),
                 float(0),
                 float(vertical_x + arc_width),
-                float(3508),
+                float(pageHeight),
             ],
             start=start,
             end=end,
             fill=255,
             width=randint(1, 3),
         )
-    linesImg.paste(PIL.Image.new(mode="L", size=(2480, 3508)), mask=mask)
+    linesImg.paste(PIL.Image.new(mode="L", size=(pageWidth, pageHeight)), mask=mask)
     page.paste(PIL.ImageOps.invert(linesImg), mask=linesImg)
 
     # Save the final page with lines to the pages directory
@@ -316,6 +320,14 @@ if __name__ == "__main__":
         required=False,
         default=False,
     )
+    parser.add_argument(
+        "-e",
+        "--extended",
+        help="Extended page generation, line skipping and random x",
+        action="store_true",
+        required=False,
+        default=False,
+    )
     args = parser.parse_args()
 
     if not os.path.exists(args.output):
@@ -332,10 +344,10 @@ if __name__ == "__main__":
             os.mkdir(dir)
     num_pages = args.pages
     split = args.split  # Get the 'split' argument value
-
+    extended = args.extended
     # Create a list of arguments for each page
     print(f"[LineRemoverNN] [PageGenerator] Generating {num_pages} pages")
-    page_args = [(i, split) for i in range(num_pages)]
+    page_args = [(i, split, extended) for i in range(num_pages)]
     starttime = time.time_ns()
     with Pool() as pool:
         list(tqdm.tqdm(pool.imap(make_page, page_args), total=num_pages))

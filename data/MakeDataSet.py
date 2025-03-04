@@ -15,6 +15,7 @@ import json
 import os
 import argparse
 
+
 # Load word metadata
 words = []
 with open("./words.txt", encoding="UTF-8", mode="r") as words_file:
@@ -138,19 +139,28 @@ def draw_arc_with_condition(
 
 def make_page(args):
     """Generate a single page with random words."""
-    imageIndex, split, extended = args
+    imageIndex, split, extended, dirs = args
+    pages_dir, pages_dir_blocks, nolines_dir, nolines_dir_blocks, json_dir = dirs
     randomPageSize = lambda: 3000 if not extended else randint(1000, 5000)
     pageWidth, pageHeight = randomPageSize(), randomPageSize()
     # Create a blank page with white background
-    page = PIL.Image.new(mode="RGBA", size=(pageWidth, pageHeight), color=(255, 255, 255))
+    page = PIL.Image.new(
+        mode="RGBA", size=(pageWidth, pageHeight), color=(255, 255, 255)
+    )
     draw = PIL.ImageDraw.Draw(page)
     mask = PIL.Image.new("L", (pageWidth, pageHeight), 0)  # Create a mask for holes
     mask_draw = PIL.ImageDraw.Draw(mask)
-    linesImg = PIL.Image.new("L", (pageWidth, pageHeight), 0)  # Create a blank image for lines
+    linesImg = PIL.Image.new(
+        "L", (pageWidth, pageHeight), 0
+    )  # Create a blank image for lines
     lines_draw = PIL.ImageDraw.Draw(linesImg)
 
-    # Initialize variables for positioning    
-    randX = lambda: 30 if not extended else (randint(350, 500) if bool(randint(0, 1)) else randint(30, 100))
+    # Initialize variables for positioning
+    randX = lambda: (
+        30
+        if not extended
+        else (randint(350, 500) if bool(randint(0, 1)) else randint(30, 100))
+    )
     x = randX()
     y = 300
     lineSize = randint(120, 200)  # Random line height for text
@@ -162,7 +172,9 @@ def make_page(args):
     wordsL = []  # List to store metadata about the words on the page
     gS = 255  # Grayscale value (used for line color)
     hasImperfectArcs = bool(randint(0, 1))  # Randomly decide whether to add arcs
-    skipLineProb = 1/4 if extended else 0 # Probability of skipping one or multiple lines
+    skipLineProb = (
+        1 / 4 if extended else 0
+    )  # Probability of skipping one or multiple lines
     stopX = pageWidth - randX()
 
     # Generate content by iterating through the words list
@@ -178,6 +190,13 @@ def make_page(args):
         # Extract dimensions of the word box
         _, _, w, h = box
 
+        # Load the word image
+        wordimg = load_image(path)
+        if wordimg is None:
+            words.pop(i % len(words))
+            continue
+        i += 1
+
         # Move to a new line if the word doesn't fit in the current row
         if x + w >= pageWidth - stopX:
             x = randX()
@@ -189,11 +208,6 @@ def make_page(args):
         if y >= pageHeight - lineSize:
             break
 
-        # Load the word image
-        wordimg = load_image(path)
-        i += 1
-        if wordimg is None:
-            continue
 
         # Random vertical adjustment for the word placement
         rn = randint(-20, 20)
@@ -332,7 +346,9 @@ if __name__ == "__main__":
 
     if not os.path.exists(args.output):
         raise ValueError("Output folder does not exist")
+    
     data_dir = args.output
+    
     pages_dir = os.path.join(data_dir, "generated-pages")
     nolines_dir = os.path.join(data_dir, "generated-nolines-pages")
     pages_dir_blocks = os.path.join(data_dir, "generated-pages-blocks")
@@ -342,12 +358,13 @@ if __name__ == "__main__":
     for dir in [pages_dir, nolines_dir, pages_dir_blocks, nolines_dir_blocks, json_dir]:
         if not os.path.exists(dir):
             os.mkdir(dir)
+    
     num_pages = args.pages
     split = args.split  # Get the 'split' argument value
     extended = args.extended
     # Create a list of arguments for each page
     print(f"[LineRemoverNN] [PageGenerator] Generating {num_pages} pages")
-    page_args = [(i, split, extended) for i in range(num_pages)]
+    page_args = [(i, split, extended, (pages_dir, pages_dir_blocks, nolines_dir, nolines_dir_blocks, json_dir)) for i in range(num_pages)]
     starttime = time.time_ns()
     with Pool() as pool:
         list(tqdm.tqdm(pool.imap(make_page, page_args), total=num_pages))

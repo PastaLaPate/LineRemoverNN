@@ -17,7 +17,6 @@ import math
 import numpy as np
 from random import randint
 from typing import List, Union
-from mltu.utils.text_utils import ctc_decoder, get_cer
 
 sys.path.append("../../")
 # from WordRecogniser.inf import infer

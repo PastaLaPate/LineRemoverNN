@@ -50,5 +50,3 @@ See docs directly on functions descs,
 ## Inspiration
 
 Model Structure : [Gold, C., Zesch, T. (2022). CNN-Based Ruled Line Removal in Handwritten Documents. In: Porwal, U., Fornés, A., Shafait, F. (eds) Frontiers in Handwriting Recognition. ICFHR 2022](https://doi.org/10.1007/978-3-031-21648-0_36)
-
-Word Recognition model for Eval : [MLTU Tutorials](https://github.com/pythonlessons/mltu/tree/main/Tutorials/08_handwriting_recognition_torch)

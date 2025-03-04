@@ -11,7 +11,6 @@ import torch.nn as nn
 from torchvision import transforms
 import torchvision.transforms.v2 as v2
 
-# from mltu.utils.text_utils import ctc_decoder, get_cer
 import matplotlib.pyplot as plt
 
 # from WordRecogniser.inf import infer

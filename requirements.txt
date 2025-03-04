@@ -1,6 +1,5 @@
 torch
 torchvision
-mltu
 opencv-python
 tqdm
 tensorboard

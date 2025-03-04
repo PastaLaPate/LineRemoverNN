@@ -20,6 +20,9 @@ def UniformLighting(
 
 
 if __name__ == "__main__":
+    network = loadBestModel()
+    network.eval()
+    network.to("cuda")
 
     img = cv2.imread("images/unnamed.jpg")
     imga = UniformLighting(img)

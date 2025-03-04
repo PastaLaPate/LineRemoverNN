@@ -45,6 +45,13 @@ if __name__ == "__main__":
         help="Print or not the loss of the treated images",
         default=False,
     )
+    argParser.add_argument(
+        "-r",
+        "--random",
+        action="store_true",
+        help="Random page number",
+        default=True
+    )
     args = argParser.parse_args()
 
     network = loadBestModel()
@@ -57,8 +64,8 @@ if __name__ == "__main__":
     noLinesImgs = []
     start = randint(
         1,
-        len(os.listdir(os.path.join(args.data, "generated-pages-blocks")))
-        - numberOfImagesToTest,
+        (len(os.listdir(os.path.join(args.data, "generated-pages-blocks")))
+        - numberOfImagesToTest) if args.random else 2,
     )
     print("[LineRemoverNN] [Tester] Loading images...")
     for i in range(start, start + numberOfImagesToTest):

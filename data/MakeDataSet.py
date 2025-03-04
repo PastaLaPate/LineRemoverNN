@@ -159,7 +159,7 @@ def make_page(args):
     randX = lambda: (
         30
         if not extended
-        else (randint(350, 500) if bool(randint(0, 1)) else randint(30, 100))
+        else (randint(30, 50) if bool(randint(0, 1)) else randint(100, 120))
     )
     x = randX()
     y = 300

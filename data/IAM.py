@@ -222,8 +222,7 @@ class IAMPagesSplitted(Dataset):
                 noLinesImagePath, torchvision.io.ImageReadMode.GRAY
             )
         except Exception as e:
-            print(noLinesImagePath)
-            raise Exception(e.message)
+            raise e
         jsonRead = []
         if self.readJson:
             with open(jsonPath, "r") as json_file:

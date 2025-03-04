@@ -141,7 +141,7 @@ def make_page(args):
     """Generate a single page with random words."""
     imageIndex, split, extended, dirs = args
     pages_dir, pages_dir_blocks, nolines_dir, nolines_dir_blocks, json_dir = dirs
-    randomPageSize = lambda: 3000 if not extended else randint(1000, 5000)
+    randomPageSize = lambda: 3000 if not extended else randint(1000, 4000)
     pageWidth, pageHeight = randomPageSize(), randomPageSize()
     # Create a blank page with white background
     page = PIL.Image.new(
@@ -198,11 +198,11 @@ def make_page(args):
         i += 1
 
         # Move to a new line if the word doesn't fit in the current row
-        if x + w >= pageWidth - stopX:
+        if x + w >= stopX:
             x = randX()
             stopX = pageWidth - randX()
             lines.append(y)  # Add current y-coordinate to lines list
-            y += lineSize if randint(0, 1) < skipLineProb else lineSize * randint(2, 3)
+            y += lineSize if randint(0, 1) < skipLineProb else lineSize * randint(1, 2)
 
         # Stop adding words if the page height is exceeded
         if y >= pageHeight - lineSize:

@@ -125,11 +125,11 @@ class NeuralNetwork(nn.Module):
             nn.BatchNorm2d(32),
             nn.LeakyReLU(),
             # RectFilter Transpose: width = 9, height = 21
-            nn.Conv2d(32, 16, (9, 21), padding=(4, 10)),  # Vertical focus
-            nn.BatchNorm2d(16),
+            nn.Conv2d(32, 32, (9, 21), padding=(4, 10)),  # Vertical focus
+            nn.BatchNorm2d(32),
             nn.LeakyReLU(),
             # Standard small filter for fine details
-            nn.Conv2d(16, 8, (3, 3), padding=1),  # Small fine-grained filter
+            nn.Conv2d(32, 8, (3, 3), padding=1),  # Small fine-grained filter
             nn.BatchNorm2d(8),
             nn.LeakyReLU(),
         )

@@ -6,9 +6,12 @@ from multiprocessing import Pool
 from tqdm import tqdm
 import argparse
 
+currentIndx = 0
+
 
 # Process a single file
 def process_file(args):
+    global currentIndx
     file, folderPath, newFolderPath, idx = args
     if file.endswith(".png"):
         try:
@@ -16,15 +19,18 @@ def process_file(args):
             blocks = split_into_blocks(ToTensor()(loadedImg))
             for i, block in enumerate(blocks):
                 ToPILImage()(block).save(
-                    os.path.join(newFolderPath, f"{idx * len(blocks) + i}.png")
+                    os.path.join(newFolderPath, f"{currentIndx}.png")
                 )
+                currentIndx += 1
         except Exception as e:
-
+            print(e)
             print(file)
 
 
 # Process all files in a folder
 def process_folder(folderPath, newFolderPath):
+    global currentIndx
+    currentIndx = 0
     os.makedirs(newFolderPath, exist_ok=True)
     files = [file for file in os.listdir(folderPath) if file.endswith(".png")]
 

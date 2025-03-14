@@ -24,7 +24,7 @@ if __name__ == "__main__":
     network.eval()
     network.to("cuda")
 
-    img = cv2.imread("images/unnamed.jpg")
+    img = cv2.imread("a.jpg")
     imga = UniformLighting(img)
     img_splitted = splitAndProcessImg(imga)
     reconstructed_image = reconstruct_image(img_splitted, img.shape[0], img.shape[1])

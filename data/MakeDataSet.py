@@ -1,14 +1,14 @@
-import PIL.Image
+import PIL.Image as Image
 import PIL.ImageDraw
 import PIL.ImageOps
+import cv2
 import numpy as np
-from random import randint, uniform as randfloat
+from random import randint, random, uniform as randfloat
 import tqdm
 from functools import lru_cache
 from multiprocessing import Pool
 from IAM import split_into_blocks
 from torchvision.transforms import ToTensor, ToPILImage
-from random import randint, uniform
 import math
 import time
 import json
@@ -45,7 +45,7 @@ def makeTransparentBG(img):
     return PIL.Image.fromarray(img_data, "RGBA")
 
 
-def load_image(path):
+def load_image(path) -> Image.Image:
     """Load and preprocess a word image."""
     try:
         img = PIL.Image.open(path).convert("RGBA")
@@ -84,7 +84,7 @@ def draw_imperfect_arc(
     """
     # Draw the base arc
     lines_draw.arc(bbox, start=start, end=end, fill=fill, width=width)
-
+    uniform = randfloat
     # If a mask is provided, we will add holes to it
     for _ in range(hole_count):
         angle = math.radians(uniform(start, end))
@@ -137,12 +137,84 @@ def draw_arc_with_condition(
     else:
         return draw.arc(bbox, start=start, end=end, fill=fill, width=width)
 
+
+def add_random_perspective(img: Image.Image, max_warp=0.3):
+    """
+    Apply a random perspective transformation to an image without cropping.
+
+    :param img: PIL Image
+    :param max_warp: Maximum proportion of width/height to perturb the corners
+    :return: Transformed PIL Image
+    """
+    width, height = img.size
+
+    # Define the original corner points
+    src_points = np.array(
+        [[0, 0], [width, 0], [width, height], [0, height]], dtype=np.float32
+    )
+
+    # Generate random perturbations within a safe range
+    def random_offset(val, max_offset):
+        return val + randfloat(-max_offset, max_offset)
+
+    max_dx, max_dy = width * max_warp, height * max_warp
+
+    dst_points = np.array(
+        [
+            [random_offset(0, max_dx), random_offset(0, max_dy)],
+            [random_offset(width, max_dx), random_offset(0, max_dy)],
+            [random_offset(width, max_dx), random_offset(height, max_dy)],
+            [random_offset(0, max_dx), random_offset(height, max_dy)],
+        ],
+        dtype=np.float32,
+    )
+
+    # Compute the perspective transform matrix
+    matrix = cv2.getPerspectiveTransform(src_points, dst_points)
+
+    # Compute the new bounding box
+    corners = np.array(
+        [[0, 0, 1], [width, 0, 1], [width, height, 1], [0, height, 1]], dtype=np.float32
+    ).T
+
+    new_corners = matrix @ corners
+    new_corners /= new_corners[2]  # Normalize
+
+    # Compute new image size
+    min_x, min_y = new_corners[:2].min(axis=1)
+    max_x, max_y = new_corners[:2].max(axis=1)
+
+    new_width, new_height = int(max_x - min_x), int(max_y - min_y)
+
+    # Adjust transformation to keep everything visible
+    translation = np.array(
+        [[1, 0, -min_x], [0, 1, -min_y], [0, 0, 1]], dtype=np.float32
+    )
+
+    final_matrix = translation @ matrix
+
+    # Apply transformation
+    img_np = np.array(img)
+    transformed = cv2.warpPerspective(
+        img_np, final_matrix, (new_width, new_height), borderMode=cv2.BORDER_CONSTANT
+    )
+
+    return Image.fromarray(transformed)
+
+
+blocks_index = 0
+blocks_index_l = 0
+
+
 def make_page(args):
+    global blocks_index, blocks_index_l
     """Generate a single page with random words."""
-    imageIndex, split, extended, dirs = args
+    imageIndex, split, extended, dirs, size = args
     pages_dir, pages_dir_blocks, nolines_dir, nolines_dir_blocks, json_dir = dirs
-    randomPageSize = lambda: 3000 if not extended else randint(1000, 4000)
-    pageWidth, pageHeight = randomPageSize(), randomPageSize()
+    # randomPageSize = lambda: (
+    #    size[0] if size[0] != 0 else (3000 if not extended else randint(1000, 4000))
+    # )
+    pageWidth, pageHeight = 4000, 4000  # randomPageSize(), randomPageSize()
     # Create a blank page with white background
     page = PIL.Image.new(
         mode="RGBA", size=(pageWidth, pageHeight), color=(255, 255, 255)
@@ -162,7 +234,7 @@ def make_page(args):
         else (randint(30, 50) if bool(randint(0, 1)) else randint(100, 120))
     )
     x = randX()
-    y = 300
+    y = randint(0, 50)
     lineSize = randint(120, 200)  # Random line height for text
     smallLinesByLine = randint(4, 7)
     smallLineSize = (
@@ -171,7 +243,9 @@ def make_page(args):
     lines = []  # List to store y-coordinates of lines
     wordsL = []  # List to store metadata about the words on the page
     gS = 255  # Grayscale value (used for line color)
-    hasImperfectArcs = bool(randint(0, 1))  # Randomly decide whether to add arcs
+    hasImperfectArcs = (
+        bool(randint(0, 1)) if extended else False
+    )  # Randomly decide whether to add arcs
     skipLineProb = (
         1 / 4 if extended else 0
     )  # Probability of skipping one or multiple lines
@@ -179,6 +253,7 @@ def make_page(args):
 
     # Generate content by iterating through the words list
     i = randint(0, len(words))
+    max_h = 0
     while True:
         word = words[i % len(words)]  # Cycle through the words list
         path, box, transcript, wgS = word  # Unpack word details
@@ -190,24 +265,35 @@ def make_page(args):
         # Extract dimensions of the word box
         _, _, w, h = box
 
+        max_h = max(max_h, h)
+
         # Load the word image
         wordimg = load_image(path)
-        if wordimg is None:
+        if wordimg is None or wordimg.width == 0 or wordimg.height == 0:
             words.pop(i % len(words))
             continue
         i += 1
+        randResize = lambda x: int(randfloat(0.7, 1.3) * x)
+        w = randResize(wordimg.width)
+        h = randResize(wordimg.height)
+        wordimg = wordimg.resize((w, h))
+        wordimg = add_random_perspective(wordimg)
 
         # Move to a new line if the word doesn't fit in the current row
         if x + w >= stopX:
             x = randX()
             stopX = pageWidth - randX()
             lines.append(y)  # Add current y-coordinate to lines list
-            y += lineSize if randint(0, 1) < skipLineProb else lineSize * randint(1, 2)
+            y += (
+                max(max_h, lineSize)
+                if randint(0, 1) < skipLineProb
+                else max(max_h, lineSize) * randint(1, 2)
+            )
+            max_h = 0
 
         # Stop adding words if the page height is exceeded
         if y >= pageHeight - lineSize:
             break
-
 
         # Random vertical adjustment for the word placement
         rn = randint(-20, 20)
@@ -216,6 +302,7 @@ def make_page(args):
         wordsL.append({"text": transcript, "x": x, "y": y - h + rn, "w": w, "h": h})
 
         # Paste the word image onto the page
+        # wordimg = apply_perspective_transform(wordimg)
         page.paste(wordimg, (x, y - h + rn), wordimg)
 
         # Update x-coordinate for the next word, with a random gap
@@ -227,8 +314,12 @@ def make_page(args):
         blocks = split_into_blocks(ToTensor()(page))
         for i, block in enumerate(blocks):
             ToPILImage()(block).save(
-                os.path.join(nolines_dir_blocks, f"{imageIndex * len(blocks) + i}.png")
+                os.path.join(nolines_dir_blocks, f"{blocks_index}.png")
             )
+            blocks_index += 1
+    elif pageHeight == pageWidth == 512:
+        page.save(f"{nolines_dir_blocks}/{blocks_index}.png")
+        blocks_index += 1
 
     # Save word metadata to a JSON file
     with open(f"{json_dir}/{imageIndex}.json", mode="w") as jsonfile:
@@ -248,7 +339,6 @@ def make_page(args):
             )  # 1/2 Chance of reverse arc
             if randint(0, TogglingChance) == 0:
                 arcToggle = not arcToggle
-
             draw_arc_with_condition(
                 hasImperfectArcs,
                 draw,
@@ -263,7 +353,7 @@ def make_page(args):
                 start=start,
                 end=end,
                 fill=255,
-                width=randint(1, 3),
+                width=randint(1, 3) if j == 0 or j == smallLinesByLine - 1 else 5,
             )
 
     # Draw vertical lines with slight arcs to break regularity
@@ -296,13 +386,16 @@ def make_page(args):
 
     # Save the final page with lines to the pages directory
     page.save(f"{pages_dir}/{imageIndex}-page.png")
-
     if split:
         blocks = split_into_blocks(ToTensor()(page))
         for i, block in enumerate(blocks):
             ToPILImage()(block).save(
-                os.path.join(pages_dir_blocks, f"{imageIndex * len(blocks) + i}.png")
+                os.path.join(pages_dir_blocks, f"{blocks_index_l}.png")
             )
+            blocks_index_l += 1
+    elif pageHeight == pageWidth == 512:
+        blocks_index_l += 1
+        linesImg.save(f"{pages_dir_blocks}/{blocks_index_l}.png")
 
 
 if __name__ == "__main__":
@@ -342,13 +435,21 @@ if __name__ == "__main__":
         required=False,
         default=False,
     )
+    parser.add_argument(
+        "-b",
+        "--blocks",
+        help="Generate directly blocks",
+        action="store_true",
+        required=False,
+        default=False,
+    )
     args = parser.parse_args()
 
     if not os.path.exists(args.output):
         raise ValueError("Output folder does not exist")
-    
+
     data_dir = args.output
-    
+
     pages_dir = os.path.join(data_dir, "generated-pages")
     nolines_dir = os.path.join(data_dir, "generated-nolines-pages")
     pages_dir_blocks = os.path.join(data_dir, "generated-pages-blocks")
@@ -358,13 +459,22 @@ if __name__ == "__main__":
     for dir in [pages_dir, nolines_dir, pages_dir_blocks, nolines_dir_blocks, json_dir]:
         if not os.path.exists(dir):
             os.mkdir(dir)
-    
+
     num_pages = args.pages
     split = args.split  # Get the 'split' argument value
     extended = args.extended
     # Create a list of arguments for each page
     print(f"[LineRemoverNN] [PageGenerator] Generating {num_pages} pages")
-    page_args = [(i, split, extended, (pages_dir, pages_dir_blocks, nolines_dir, nolines_dir_blocks, json_dir)) for i in range(num_pages)]
+    page_args = [
+        (
+            i,
+            split,
+            extended,
+            (pages_dir, pages_dir_blocks, nolines_dir, nolines_dir_blocks, json_dir),
+            ((0, 0) if not args.blocks else (512, 512)),
+        )
+        for i in range(num_pages)
+    ]
     starttime = time.time_ns()
     with Pool() as pool:
         list(tqdm.tqdm(pool.imap(make_page, page_args), total=num_pages))

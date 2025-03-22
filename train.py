@@ -119,7 +119,7 @@ if __name__ == "__main__":
     dataloader = DataLoader(
         dataset, batch_size=16, shuffle=True, collate_fn=collate_fn, num_workers=8
     )
-    optimizer = torch.optim.Adam(network.parameters(), lr=1e-4)
+    optimizer = torch.optim.Adam(network.parameters(), lr=0.001)
     epochs = args.epoch
     loss = nn.MSELoss()
     startingEpoch = 0
@@ -148,17 +148,11 @@ if __name__ == "__main__":
             linesImages, noLines, shapes = batch
             linesImages, noLines = linesImages.to(device), noLines.to(device)
 
+            optimizer.zero_grad()
             processedFilters = network(linesImages)
-            combinedFilter = torch.mean(
-                processedFilters, dim=1, keepdim=True
-            )  # Shape: [10, 1, 512, 512]
-
-            # Subtract the composite filter from the input
-            filteredImages = combinedFilter - linesImages  # Shape: [10, 1, 512, 512]
 
             # Compute loss between the subtracted image and the target (noLines)
-            pixelLoss = torch.sqrt(loss(filteredImages, noLines))
-            optimizer.zero_grad()
+            pixelLoss = torch.sqrt(loss(processedFilters, noLines))
             # Back prog
             pixelLoss.backward()
 

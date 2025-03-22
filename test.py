@@ -46,11 +46,7 @@ if __name__ == "__main__":
         default=False,
     )
     argParser.add_argument(
-        "-r",
-        "--random",
-        action="store_true",
-        help="Random page number",
-        default=True
+        "-r", "--random", action="store_true", help="Random page number", default=True
     )
     args = argParser.parse_args()
 
@@ -64,8 +60,14 @@ if __name__ == "__main__":
     noLinesImgs = []
     start = randint(
         1,
-        (len(os.listdir(os.path.join(args.data, "generated-pages-blocks")))
-        - numberOfImagesToTest) if args.random else 2,
+        (
+            (
+                len(os.listdir(os.path.join(args.data, "generated-pages-blocks")))
+                - numberOfImagesToTest
+            )
+            if args.random
+            else 2
+        ),
     )
     print("[LineRemoverNN] [Tester] Loading images...")
     for i in range(start, start + numberOfImagesToTest):
@@ -110,9 +112,8 @@ if __name__ == "__main__":
 
         for idx, outputImg in enumerate(outputs):
             imgIdx = batchStart + idx
-            outputImg = torch.mean(outputImg, dim=0, keepdim=True)
-            output_image = outputImg - batchImgs[idx]
-
+            output_image = outputImg
+            print(output_image[0][0][0])
             if args.show:
                 plt.subplot(5, numberOfImagesToTest, numberOfImagesToTest + imgIdx + 1)
                 plt.title(f"Detected {imgIdx}")

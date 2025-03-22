@@ -1,3 +1,4 @@
+import shutil
 import PIL.Image as Image
 import PIL.ImageDraw
 import PIL.ImageOps
@@ -6,7 +7,7 @@ import numpy as np
 from random import randint, random, uniform as randfloat
 import tqdm
 from functools import lru_cache
-from multiprocessing import Pool
+from multiprocessing import Pool, Value
 from IAM import split_into_blocks
 from torchvision.transforms import ToTensor, ToPILImage
 import math
@@ -45,6 +46,7 @@ def makeTransparentBG(img):
     return PIL.Image.fromarray(img_data, "RGBA")
 
 
+@lru_cache(maxsize=1000)
 def load_image(path) -> Image.Image:
     """Load and preprocess a word image."""
     try:
@@ -202,10 +204,6 @@ def add_random_perspective(img: Image.Image, max_warp=0.3):
     return Image.fromarray(transformed)
 
 
-blocks_index = 0
-blocks_index_l = 0
-
-
 def make_page(args):
     global blocks_index, blocks_index_l
     """Generate a single page with random words."""
@@ -214,7 +212,7 @@ def make_page(args):
     # randomPageSize = lambda: (
     #    size[0] if size[0] != 0 else (3000 if not extended else randint(1000, 4000))
     # )
-    pageWidth, pageHeight = 4000, 4000  # randomPageSize(), randomPageSize()
+    pageWidth, pageHeight = 2500, 3500  # randomPageSize(), randomPageSize()
     # Create a blank page with white background
     page = PIL.Image.new(
         mode="RGBA", size=(pageWidth, pageHeight), color=(255, 255, 255)
@@ -272,12 +270,14 @@ def make_page(args):
         if wordimg is None or wordimg.width == 0 or wordimg.height == 0:
             words.pop(i % len(words))
             continue
-        i += 1
         randResize = lambda x: int(randfloat(0.7, 1.3) * x)
         w = randResize(wordimg.width)
         h = randResize(wordimg.height)
+        if not w > 0 or not h > 0:
+            continue
         wordimg = wordimg.resize((w, h))
         wordimg = add_random_perspective(wordimg)
+        i += 1
 
         # Move to a new line if the word doesn't fit in the current row
         if x + w >= stopX:
@@ -313,13 +313,13 @@ def make_page(args):
     if split:
         blocks = split_into_blocks(ToTensor()(page))
         for i, block in enumerate(blocks):
-            ToPILImage()(block).save(
-                os.path.join(nolines_dir_blocks, f"{blocks_index}.png")
+            with blocks_index.get_lock():
+                blocks_index.value += 1
+                block_number = blocks_index.value - 1
+            ToPILImage()(block).convert("L").save(
+                os.path.join(nolines_dir_blocks, f"{block_number}.png"),
+                format="PNG",
             )
-            blocks_index += 1
-    elif pageHeight == pageWidth == 512:
-        page.save(f"{nolines_dir_blocks}/{blocks_index}.png")
-        blocks_index += 1
 
     # Save word metadata to a JSON file
     with open(f"{json_dir}/{imageIndex}.json", mode="w") as jsonfile:
@@ -386,16 +386,25 @@ def make_page(args):
 
     # Save the final page with lines to the pages directory
     page.save(f"{pages_dir}/{imageIndex}-page.png")
+    if page.width > 2500 or page.height > 3500:
+        print(
+            f"[LineRemoverNN] [PageGenerator] WARNING: Page {imageIndex} is too large ({page.width}x{page.height}), consider reducing the size"
+        )
     if split:
         blocks = split_into_blocks(ToTensor()(page))
         for i, block in enumerate(blocks):
-            ToPILImage()(block).save(
-                os.path.join(pages_dir_blocks, f"{blocks_index_l}.png")
+            with blocks_index_l.get_lock():
+                blocks_index_l.value += 1
+                block_number = blocks_index_l.value - 1
+            ToPILImage()(block).convert("L").save(
+                os.path.join(pages_dir_blocks, f"{block_number}.png"),
+                format="PNG",
             )
-            blocks_index_l += 1
-    elif pageHeight == pageWidth == 512:
-        blocks_index_l += 1
-        linesImg.save(f"{pages_dir_blocks}/{blocks_index_l}.png")
+
+
+def init_worker(shared_values):
+    global blocks_index, blocks_index_l
+    blocks_index, blocks_index_l = shared_values
 
 
 if __name__ == "__main__":
@@ -444,9 +453,16 @@ if __name__ == "__main__":
         default=False,
     )
     args = parser.parse_args()
+    if args.blocks:
+        print(
+            "[LineRemoverNN] [PageGenerator] FATAL: Blocks generation is broken, you may use split instead, aborting"
+        )
+        exit(1)
+    print("[LineRemoverNN] [PageGenerator] Preparing for page generation")
 
     if not os.path.exists(args.output):
-        raise ValueError("Output folder does not exist")
+        os.mkdir(args.output)
+        print("[LineRemoverNN] [PageGenerator] Created output directory ", args.output)
 
     data_dir = args.output
 
@@ -458,6 +474,14 @@ if __name__ == "__main__":
 
     for dir in [pages_dir, nolines_dir, pages_dir_blocks, nolines_dir_blocks, json_dir]:
         if not os.path.exists(dir):
+            print("[LineRemoverNN] [PageGenerator] Creating directory ", dir)
+            os.mkdir(dir)
+        else:
+            print(
+                "[LineRemoverNN] [PageGenerator] WARNING: Removing existing data in dir ",
+                dir,
+            )
+            shutil.rmtree(dir)
             os.mkdir(dir)
 
     num_pages = args.pages
@@ -465,6 +489,7 @@ if __name__ == "__main__":
     extended = args.extended
     # Create a list of arguments for each page
     print(f"[LineRemoverNN] [PageGenerator] Generating {num_pages} pages")
+    shared_values = (Value("i", 0), Value("i", 0))
     page_args = [
         (
             i,
@@ -476,7 +501,7 @@ if __name__ == "__main__":
         for i in range(num_pages)
     ]
     starttime = time.time_ns()
-    with Pool() as pool:
+    with Pool(initializer=init_worker, initargs=(shared_values,)) as pool:
         list(tqdm.tqdm(pool.imap(make_page, page_args), total=num_pages))
     print(
         f"[LineRemoverNN] [PageGenerator] Finished generating {num_pages} pages in {(time.time_ns() - starttime) / 1e9} seconds"

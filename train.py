@@ -6,6 +6,7 @@ import math
 from torch.utils.tensorboard import SummaryWriter
 from data.IAM import IAMPages, reconstruct_image, IAMPagesSplitted
 from models.model import NeuralNetwork
+from models.loss import *
 from torch.utils.data import DataLoader
 import torch.nn as nn
 from torchvision import transforms
@@ -39,7 +40,7 @@ data_dir = "./"
 
 def getBestModelPath():
     bestModelPath = None
-    bestModelEpoch = 0
+    bestModelEpoch = -1
     for model in os.listdir(
         os.path.join(os.path.realpath(os.path.dirname(__file__)), "models/saved/")
     ):
@@ -57,6 +58,11 @@ def getBestModelPath():
 
 def loadBestModel() -> NeuralNetwork:
     bestModelPath, epochs = getBestModelPath()
+    if bestModelPath is None:
+        print(
+            "[LineRemoverNN] [Model Loader] FATAL: No model found to load, exiting..."
+        )
+        exit(1)
     network = NeuralNetwork()
     network.load_state_dict(torch.load(bestModelPath, weights_only=True))
     print(
@@ -84,7 +90,18 @@ if __name__ == "__main__":
     )
     argsParser.add_argument("-d", "--dataset", help="Dataset location", required=True)
     argsParser.add_argument(
-        "-l", "--load", help="Load the best model", action="store_true", default=False
+        "-l",
+        "--load",
+        help="Load the best model already saved before (continue training)",
+        action="store_true",
+        default=False,
+    )
+    argsParser.add_argument(
+        "-lo",
+        "--loss",
+        required=True,
+        help="Loss function to use : VGG, SSIM or BCE Loss",
+        choices=["vgg", "ssim", "bce"],
     )
     args = argsParser.parse_args()
 
@@ -117,11 +134,21 @@ if __name__ == "__main__":
         sameTransform=True,
     )
     dataloader = DataLoader(
-        dataset, batch_size=16, shuffle=True, collate_fn=collate_fn, num_workers=8
+        dataset, batch_size=8, shuffle=True, collate_fn=collate_fn, num_workers=8
     )
     optimizer = torch.optim.Adam(network.parameters(), lr=0.001)
     epochs = args.epoch
-    loss = nn.MSELoss()
+    loss = VGGLoss()
+    l_name = "VGG"
+    if args.loss == "vgg":
+        loss = VGGLoss()
+    elif args.loss == "ssim":
+        loss = SSIM_L1_Loss()
+        l_name = "SSIM"
+    elif args.loss == "bce":
+        loss = BCEL1Loss()
+        l_name = "BCE"
+    print("[LineRemoverNN] [Trainer] Using loss function : ", l_name)
     startingEpoch = 0
     network.apply(init_weights)
 
@@ -136,15 +163,20 @@ if __name__ == "__main__":
         os.mkdir(os.path.join("./models", "saved"))
 
     # Training...
+    print(
+        "[LineRemoverNN] [Trainer] Starting training... for",
+        epochs - startingEpoch,
+        "epochs",
+    )
 
     for epoch in range(startingEpoch, epochs):
+        print(f"[LineRemoverNN] [Trainer] Starting Epoch : {epoch}")
         torch.cuda.empty_cache()
         network.train()
         totalLoss = 0
 
         for batch in tqdm(dataloader):
             # Executing
-
             linesImages, noLines, shapes = batch
             linesImages, noLines = linesImages.to(device), noLines.to(device)
 
@@ -152,20 +184,43 @@ if __name__ == "__main__":
             processedFilters = network(linesImages)
 
             # Compute loss between the subtracted image and the target (noLines)
-            pixelLoss = torch.sqrt(loss(processedFilters, noLines))
+            pixelLoss = loss(processedFilters, noLines)
+
             # Back prog
             pixelLoss.backward()
-
             optimizer.step()
+
             totalLoss += pixelLoss.item()
-        print(
-            f"[LineRemoverNN] [Trainer] Epoch : {epoch}, Average Loss : ",
-            totalLoss / len(dataloader),
-        )
+
+        avgLoss = totalLoss / len(dataloader)
+        print(f"[LineRemoverNN] [Trainer] Epoch : {epoch}, Average Loss : {avgLoss}")
+        print(f"[LineRemoverNN] [Trainer] Saving model...")
+        writer.add_scalar("Loss/train", avgLoss, epoch)
+
+        # --- Logging 5 sample output images to TensorBoard ---
+        # Switch to evaluation mode to avoid randomness (like dropout or augmentation)
+        network.eval()
+        with torch.no_grad():
+            # Get a sample batch from the dataloader (you might want to use a validation set)
+            sample_batch = next(iter(dataloader))
+            sample_linesImages, sample_noLines, sample_shapes = sample_batch
+            sample_linesImages = sample_linesImages.to(device)
+            sample_outputs = network(sample_linesImages)
+
+            # Choose the first 5 outputs
+            # If your images are in [N, C, H, W] format, ensure they're in the [0, 1] range.
+            # Here we assume they are. Otherwise, you might need to apply a normalization.
+            writer.add_images(
+                "Processed Outputs",
+                torch.clamp(sample_outputs[:5], 0, 1),
+                epoch,
+                dataformats="NCHW",
+            )
+
         # Save each epoch
-        writer.add_scalar("Loss/train", totalLoss / len(dataloader), epoch)
         torch.save(network.state_dict(), f"./models/saved/epoch-{epoch}.pt")
         print(
             f'[LineremoverNN] [Trainer] Model saved at "./models/saved/epoch-{epoch}.pt"'
         )
+
     writer.flush()

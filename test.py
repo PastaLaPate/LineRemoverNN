@@ -6,6 +6,7 @@ import matplotlib.pyplot as plt
 from postProcessing import thresholdImage
 from random import randint
 from torchvision.transforms import ToTensor
+from models.loss import *
 import argparse
 import cv2
 import torch.nn as nn
@@ -96,7 +97,7 @@ if __name__ == "__main__":
     noLinesImgs = torch.stack(noLinesImgs)
 
     print("[LineRemoverNN] [Tester] Using RMSE Loss...")
-    loss = nn.MSELoss()
+    loss = VGGLoss()
 
     startedTime = time.time_ns()
     print("[LineRemoverNN] [Tester] Treating images...")
@@ -112,8 +113,6 @@ if __name__ == "__main__":
 
         for idx, outputImg in enumerate(outputs):
             imgIdx = batchStart + idx
-            output_image = outputImg
-            print(output_image[0][0][0])
             if args.show:
                 plt.subplot(5, numberOfImagesToTest, numberOfImagesToTest + imgIdx + 1)
                 plt.title(f"Detected {imgIdx}")
@@ -126,26 +125,28 @@ if __name__ == "__main__":
                 )
                 plt.title(f"Output {imgIdx}")
                 plt.imshow(
-                    (output_image.detach().cpu().squeeze() * 255).numpy(), cmap="gray"
+                    ((outputImg).detach().cpu().squeeze() * 255).numpy(),
+                    cmap="gray",
                 )
                 plt.subplot(
                     5, numberOfImagesToTest, numberOfImagesToTest * 3 + imgIdx + 1
                 )
                 plt.title(f"Final {imgIdx}")
-                final = (output_image.detach().cpu().squeeze() * 255).numpy()
+                final = (outputImg.detach().cpu().squeeze() * 255).numpy()
                 plt.imshow(
                     thresholdImage(final) if args.postprocess else final,
                     cmap="gray",
                 )
 
-            pixelLoss = torch.sqrt(loss(output_image, batchNoLinesImgs[idx]))
+            pixelLoss = loss(outputImg.unsqueeze(0), batchNoLinesImgs[idx].unsqueeze(0))
 
             pPLoss = torch.sqrt(
                 loss(
                     ToTensor()(thresholdImage(final) if args.postprocess else final)
                     .to("cuda")
-                    .permute(0, 2, 1),
-                    batchNoLinesImgs[idx],
+                    .permute(0, 2, 1)
+                    .unsqueeze(0),
+                    batchNoLinesImgs[idx].unsqueeze(0),
                 )
             )
             if args.loss:

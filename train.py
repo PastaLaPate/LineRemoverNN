@@ -115,7 +115,7 @@ if __name__ == "__main__":
 
     # Init network, dataset, dataloader, loss, and optimizer
 
-    network = UNet(1, 1).to(device)#NeuralNetwork().to(device)
+    network = UNet(1, 1).to(device)  # NeuralNetwork().to(device)
     dataset = IAMPagesSplitted(
         pages_blocks_dir,
         nolines_blocks_dir,
@@ -148,8 +148,8 @@ if __name__ == "__main__":
     elif args.loss == "bce":
         loss = BCEL1Loss()
         l_name = "BCE"
-    elif args.loss = "l1":
-        loss = nn.L1()
+    elif args.loss == "l1":
+        loss = nn.L1Loss()
     print("[LineRemoverNN] [Trainer] Using loss function : ", l_name)
     startingEpoch = 0
     network.apply(init_weights)

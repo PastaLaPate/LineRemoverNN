@@ -1,24 +1,24 @@
 import sys
 
 sys.path.append("../")
-import torch
+
 import math
-from torch.utils.tensorboard import SummaryWriter
-from data.IAM import IAMPages, reconstruct_image, IAMPagesSplitted
-from models.model import NeuralNetwork
-from models.loss import *
-from torch.utils.data import DataLoader
-import torch.nn as nn
-from torchvision import transforms
-import torchvision.transforms.v2 as v2
-
+import os
 import matplotlib.pyplot as plt
-
-# from WordRecogniser.inf import infer
 from argparse import ArgumentParser
 from tqdm import tqdm
-import os
 
+import torch
+import torch.nn as nn
+import torchvision.transforms.v2 as v2
+from torchvision import transforms
+from torch.utils.tensorboard import SummaryWriter
+from torch.utils.data import DataLoader
+
+from models.model import NeuralNetwork
+from models.loss import *
+from models.test_model import UNet
+from data.IAM import IAMPages, reconstruct_image, IAMPagesSplitted
 
 device = (
     "cuda"
@@ -100,8 +100,8 @@ if __name__ == "__main__":
         "-lo",
         "--loss",
         required=True,
-        help="Loss function to use : VGG, SSIM or BCE Loss",
-        choices=["vgg", "ssim", "bce"],
+        help="Loss function to use : VGG, SSIM, L1 or BCE Loss",
+        choices=["vgg", "ssim", "bce", "l1"],
     )
     args = argsParser.parse_args()
 
@@ -115,7 +115,7 @@ if __name__ == "__main__":
 
     # Init network, dataset, dataloader, loss, and optimizer
 
-    network = NeuralNetwork().to(device)
+    network = UNet(1, 1).to(device)#NeuralNetwork().to(device)
     dataset = IAMPagesSplitted(
         pages_blocks_dir,
         nolines_blocks_dir,
@@ -148,6 +148,8 @@ if __name__ == "__main__":
     elif args.loss == "bce":
         loss = BCEL1Loss()
         l_name = "BCE"
+    elif args.loss = "l1":
+        loss = nn.L1()
     print("[LineRemoverNN] [Trainer] Using loss function : ", l_name)
     startingEpoch = 0
     network.apply(init_weights)
@@ -170,12 +172,11 @@ if __name__ == "__main__":
     )
 
     for epoch in range(startingEpoch, epochs):
-        print(f"[LineRemoverNN] [Trainer] Starting Epoch : {epoch}")
         torch.cuda.empty_cache()
         network.train()
         totalLoss = 0
 
-        for batch in tqdm(dataloader):
+        for batch in tqdm(dataloader, desc=f"Epoch : {epoch}"):
             # Executing
             linesImages, noLines, shapes = batch
             linesImages, noLines = linesImages.to(device), noLines.to(device)

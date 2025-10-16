@@ -1,105 +1,297 @@
+"""import torch
+from torch import nn
+import torch.nn.functional as F
+
+device = (
+    "cuda"
+    if torch.cuda.is_available()
+    else "mps" if torch.backends.mps.is_available() else "cpu"
+)
+print(f"[LineRemoverNN] Using {device} device")
+
+
+class CBAM(nn.Module):
+    def __init__(self, channels):
+        super(CBAM, self).__init__()
+        self.avg_pool = nn.AdaptiveAvgPool2d(1)
+        self.fc = nn.Sequential(
+            nn.Linear(channels, channels // 4),
+            nn.ReLU(),
+            nn.Linear(channels // 4, channels),
+            nn.Sigmoid(),
+        )
+
+    def forward(self, x):
+        avg_out = self.fc(self.avg_pool(x).view(x.size(0), -1))
+        avg_out = avg_out.view(x.size(0), x.size(1), 1, 1)
+        return x * avg_out
+
+
+class EncoderBlock(nn.Module):
+    def __init__(
+        self, in_channels, out_channels, stride=1, kernel_size=3, dilation=1, padding=1
+    ):
+        super(EncoderBlock, self).__init__()
+        self.conv1 = nn.Conv2d(
+            in_channels,
+            out_channels,
+            kernel_size=kernel_size,
+            padding=padding,
+            stride=stride,
+            dilation=dilation,
+        )
+        self.batch_norm1 = nn.BatchNorm2d(out_channels)
+        self.relu = nn.LeakyReLU()
+        self.block = nn.Sequential(self.conv1, self.batch_norm1, self.relu)
+
+    def forward(self, x):
+        return self.block(x)
+
+
+class ResidualBlock(nn.Module):
+    def __init__(self, filters=128):
+        super().__init__()
+        self.conv = nn.Conv2d(filters, filters, kernel_size=3, padding=1)
+        self.relu = nn.LeakyReLU()
+        self.conv2 = nn.Conv2d(filters, filters, kernel_size=3, padding=1)
+        self.relu2 = nn.LeakyReLU()
+
+    def forward(self, x):
+        res = self.relu(self.conv(x))
+        res = self.conv2(res)
+        return self.relu2(res + x)
+
+
+class DecoderBlock(nn.Module):
+    def __init__(self, in_channels, out_channels, stride=1):
+        super(DecoderBlock, self).__init__()
+        self.conv1 = nn.ConvTranspose2d(
+            in_channels,
+            out_channels,
+            kernel_size=3,
+            stride=stride,
+            padding=1,
+            output_padding=1,
+        )
+        self.relu = nn.LeakyReLU()
+        self.block = nn.Sequential(self.conv1, self.relu)
+
+    def forward(self, x):
+        return self.block(x)
+
+
+class NeuralNetwork(nn.Module):
+    def __init__(self):
+        super(NeuralNetwork, self).__init__()
+
+        # Encoder
+        self.enc1 = EncoderBlock(
+            1, 64, stride=1, kernel_size=(21, 9), padding=(10, 4)
+        )  # 512x512 -> 512x512
+        self.enc2 = EncoderBlock(
+            64, 64, stride=2, kernel_size=(9, 21), padding=(4, 10)
+        )  # 512x512 -> 256x256
+        self.enc3 = EncoderBlock(
+            64, 64, kernel_size=5, stride=2, padding=2
+        )  # 256x256 -> 128x128
+
+        # Bottleneck Residual Blocks
+        self.residuals = nn.Sequential(
+            ResidualBlock(64), ResidualBlock(64), ResidualBlock(64), CBAM(64)
+        )
+
+        # Decoder
+        self.dec1 = DecoderBlock(64, 64, stride=2)  # 128x128 -> 256x256
+        self.dec2 = DecoderBlock(64, 64, stride=2)  # 256x256 -> 512x512
+        self.dec3 = nn.Conv2d(64, 1, kernel_size=3, padding=1)  # 512x512 -> 512x512
+
+    def forward(self, x):
+        # Encoding
+        # [-1, 1]
+        x = (x - 0.5) / 0.5
+        x1 = self.enc1(x)
+        x2 = self.enc2(x1)
+        x3 = self.enc3(x2)
+
+        # Bottleneck
+        x3 = self.residuals(x3)
+
+        # Decoding
+        x4 = self.dec1(x3) + x2
+        x5 = self.dec2(x4) + x1
+
+        out = torch.tanh(self.dec3(x5))
+        # Rescale output to [0, 1] to match original image range
+        out = (out + 1) / 2
+        # Ensure x - out stays in range [0, 1]
+        return torch.clamp(x - out, 0, 1)
+"""
+
 import torch
-import torch.nn as nn
+from torch import nn
+import torch.nn.functional as F
 
-class DoubleConv(nn.Module):
-    """(convolution => => ReLU) * 2"""
+device = (
+    "cuda"
+    if torch.cuda.is_available()
+    else "mps" if torch.backends.mps.is_available() else "cpu"
+)
+print(f"[LineRemoverNN] Using {device} device")
 
-    def __init__(self, in_channels, out_channels, mid_channels=None):
-        super().__init__()
-        if not mid_channels:
-            mid_channels = out_channels
-        self.double_conv = nn.Sequential(
-            nn.Conv2d(in_channels, mid_channels, kernel_size=3, padding=1, bias=False),
-            nn.BatchNorm2d(mid_channels),
-            nn.ReLU(inplace=True),
-            nn.Conv2d(mid_channels, out_channels, kernel_size=3, padding=1, bias=False),
-            nn.BatchNorm2d(out_channels),
-            nn.ReLU(inplace=True)
+
+class LightweightCBAM(nn.Module):
+    def __init__(self, channels):
+        super(LightweightCBAM, self).__init__()
+        # Simplified channel attention
+        self.avg_pool = nn.AdaptiveAvgPool2d(1)
+        self.fc = nn.Sequential(
+            nn.Linear(channels, channels // 8),
+            nn.ReLU(),
+            nn.Linear(channels // 8, channels),
+            nn.Sigmoid(),
         )
 
     def forward(self, x):
-        return self.double_conv(x)
+        # Channel attention only (more efficient)
+        avg_out = self.fc(self.avg_pool(x).view(x.size(0), -1))
+        channel_out = avg_out.view(x.size(0), x.size(1), 1, 1)
+        return x * channel_out
 
 
-class Down(nn.Module):
-    """Downscaling with maxpool then double conv"""
+class EncoderBlock(nn.Module):
+    def __init__(self, in_channels, out_channels, stride=1, kernel_size=3, padding=1):
+        super(EncoderBlock, self).__init__()
+        self.conv = nn.Conv2d(
+            in_channels,
+            out_channels,
+            kernel_size=kernel_size,
+            padding=padding,
+            stride=stride,
+        )
+        self.bn = nn.BatchNorm2d(out_channels)
+        self.relu = nn.LeakyReLU()
 
-    def __init__(self, in_channels, out_channels):
-        super().__init__()
-        self.maxpool_conv = nn.Sequential(
-            nn.MaxPool2d(2),
-            DoubleConv(in_channels, out_channels)
+    def forward(self, x):
+        return self.relu(self.bn(self.conv(x)))
+
+
+class LightResBlock(nn.Module):
+    def __init__(self, channels):
+        super(LightResBlock, self).__init__()
+        self.conv1 = nn.Conv2d(channels, channels, kernel_size=3, padding=1)
+        self.bn1 = nn.BatchNorm2d(channels)
+        self.relu = nn.LeakyReLU()
+        self.conv2 = nn.Conv2d(channels, channels, kernel_size=3, padding=1)
+        self.bn2 = nn.BatchNorm2d(channels)
+
+    def forward(self, x):
+        residual = x
+        out = self.relu(self.bn1(self.conv1(x)))
+        out = self.bn2(self.conv2(out))
+        return self.relu(out + residual)
+
+
+class DecoderBlock(nn.Module):
+    def __init__(self, in_channels, out_channels, stride=1):
+        super(DecoderBlock, self).__init__()
+        self.conv = nn.ConvTranspose2d(
+            in_channels,
+            out_channels,
+            kernel_size=3,
+            stride=stride,
+            padding=1,
+            output_padding=1 if stride > 1 else 0,
+        )
+        self.bn = nn.BatchNorm2d(out_channels)
+        self.relu = nn.LeakyReLU()
+
+    def forward(self, x):
+        return self.relu(self.bn(self.conv(x)))
+
+
+class NeuralNetwork(nn.Module):
+    def __init__(self, base_channels=32):
+        super(NeuralNetwork, self).__init__()
+
+        # Encoder path - reduced channels
+        self.enc1_h = EncoderBlock(
+            1, base_channels, kernel_size=(11, 3), padding=(5, 1)
+        )  # Horizontal lines
+        self.enc1_v = EncoderBlock(
+            1, base_channels, kernel_size=(3, 11), padding=(1, 5)
+        )  # Vertical lines
+
+        # Feature fusion with 1x1 conv
+        self.fusion1 = nn.Conv2d(base_channels * 2, base_channels, kernel_size=1)
+
+        # Downsampling with reduced parameters
+        self.enc2 = EncoderBlock(
+            base_channels, base_channels * 2, stride=2
+        )  # 512x512 -> 256x256
+        self.enc3 = EncoderBlock(
+            base_channels * 2, base_channels * 2, stride=2
+        )  # 256x256 -> 128x128
+
+        # Lightweight bottleneck
+        self.bottleneck = nn.Sequential(
+            LightResBlock(base_channels * 2),
+            LightResBlock(base_channels * 2),
+            LightweightCBAM(base_channels * 2),
+        )
+
+        # Decoder path
+        self.dec1 = DecoderBlock(
+            base_channels * 2, base_channels * 2, stride=2
+        )  # 128x128 -> 256x256
+        self.dec2 = DecoderBlock(
+            base_channels * 2, base_channels, stride=2
+        )  # 256x256 -> 512x512
+
+        # Skip connections with element-wise addition (lighter than concatenation)
+        self.skip1 = nn.Conv2d(base_channels * 2, base_channels * 2, kernel_size=1)
+        self.skip2 = nn.Conv2d(base_channels, base_channels, kernel_size=1)
+
+        # Final output layer
+        self.final = nn.Conv2d(base_channels, 1, kernel_size=3, padding=1)
+
+        # Simple line mask for adaptive blending
+        self.line_mask = nn.Sequential(
+            nn.Conv2d(base_channels, 1, kernel_size=3, padding=1), nn.Sigmoid()
         )
 
     def forward(self, x):
-        return self.maxpool_conv(x)
+        # Normalize input
+        x_norm = (x - 0.5) / 0.5
 
+        # Multi-directional feature extraction
+        x1_h = self.enc1_h(x_norm)
+        x1_v = self.enc1_v(x_norm)
+        x1 = self.fusion1(torch.cat([x1_h, x1_v], dim=1))
 
-class Up(nn.Module):
-    """Upscaling then double conv"""
+        # Encoding
+        x2 = self.enc2(x1)
+        x3 = self.enc3(x2)
 
-    def __init__(self, in_channels, out_channels, bilinear=True):
-        super().__init__()
+        # Bottleneck processing
+        x3 = self.bottleneck(x3)
 
-        # If bilinear, use the normal convolutions to reduce the number of channels
-        if bilinear:
-            self.up = nn.Upsample(scale_factor=2, mode='bilinear', align_corners=True)
-            self.conv = DoubleConv(in_channels, out_channels, in_channels // 2)
-        else:
-            self.up = nn.ConvTranspose2d(in_channels, in_channels // 2, kernel_size=2, stride=2)
-            self.conv = DoubleConv(in_channels, out_channels)
+        # Decoding with lightweight skip connections
+        x4 = self.dec1(x3)
+        x4 = x4 + self.skip1(x2)  # Element-wise addition for skip connection
 
-    def forward(self, x1, x2):
-        x1 = self.up(x1)
-        # Input is CHW
-        diffY = x2.size()[1] - x1.size()[1]
-        diffX = x2.size()[2] - x1.size()[2]
+        x5 = self.dec2(x4)
+        x5 = x5 + self.skip2(x1)  # Element-wise addition for skip connection
 
-        x1 = nn.functional.pad(x1, [diffX // 2, diffX - diffX // 2,
-                                diffY // 2, diffY - diffY // 2])
-        # If you have padding issues, see
-        # https://github.com/milesial/Pytorch-UNet/issues/576
-        x = torch.cat([x2, x1], dim=1)
-        return self.conv(x)
+        # Line mask for adaptive processing
+        mask = self.line_mask(x5)
 
+        # Final output
+        out = torch.tanh(self.final(x5))
+        out = (out + 1) / 2  # Scale to [0, 1]
 
-class OutConv(nn.Module):
-    def __init__(self, in_channels, out_channels):
-        super(OutConv, self).__init__()
-        self.conv = nn.Conv2d(in_channels, out_channels, kernel_size=1)
+        # Blend original and processed image using the mask
+        # Where mask=1 (detected lines), use the processed output
+        # Where mask=0 (no lines), keep the original image
+        result = x * (1 - mask) + out * mask
 
-    def forward(self, x):
-        return self.conv(x)
-
-
-class UNet(nn.Module):
-    def __init__(self, n_channels, n_classes, bilinear=True):
-        super(UNet, self).__init__()
-        self.n_channels = n_channels
-        self.n_classes = n_classes
-        self.bilinear = bilinear
-
-        self.inc = DoubleConv(n_channels, 64)
-        self.down1 = Down(64, 128)
-        self.down2 = Down(128, 256)
-        self.down3 = Down(256, 512)
-        factor = 2 if bilinear else 1
-        self.down4 = Down(512, 1024 // factor)
-        self.up1 = Up(1024, 512 // factor, bilinear)
-        self.up2 = Up(512, 256 // factor, bilinear)
-        self.up3 = Up(256, 128 // factor, bilinear)
-        self.up4 = Up(128, 64, bilinear)
-        self.outc = OutConv(64, n_classes)
-
-    def forward(self, x):
-        x1 = self.inc(x)
-        x2 = self.down1(x1)
-        x3 = self.down2(x2)
-        x4 = self.down3(x3)
-        x5 = self.down4(x4)
-        x = self.up1(x5, x4)
-        x = self.up2(x, x3)
-        x = self.up3(x, x2)
-        x = self.up4(x, x1)
-        logits = self.outc(x)
-        return logits
+        return torch.clamp(result, 0, 1)

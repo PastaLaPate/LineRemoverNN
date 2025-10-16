@@ -12,6 +12,8 @@ import cv2
 import torch.nn as nn
 import os
 import time
+import gc  # Garbage collector
+
 
 if __name__ == "__main__":
     argParser = argparse.ArgumentParser(
@@ -51,7 +53,9 @@ if __name__ == "__main__":
     )
     args = argParser.parse_args()
 
-    network = loadBestModel()
+    torch.cuda.empty_cache()
+
+    network = loadBestModel()[0]
     network.eval()
     network.to("cuda")
 
@@ -87,17 +91,16 @@ if __name__ == "__main__":
             )
             plt.title(f"Goal {(i - start)}")
             plt.imshow(imgNoLine.squeeze().numpy(), cmap="gray")
-        img = (img.float() / 255.0).to("cuda")
-        imgNoLine = (imgNoLine.float() / 255.0).to("cuda")
+        img = img.float() / 255.0
+        imgNoLine = imgNoLine.float() / 255.0
         imgs.append(img)
         noLinesImgs.append(imgNoLine)
 
-    # Stack all images into a single tensor
-    imgs = torch.stack(imgs)  # Shape: [total_images, 1, height, width]
+    imgs = torch.stack(imgs)
     noLinesImgs = torch.stack(noLinesImgs)
 
     print("[LineRemoverNN] [Tester] Using RMSE Loss...")
-    loss = VGGLoss()
+    loss = nn.MSELoss()
 
     startedTime = time.time_ns()
     print("[LineRemoverNN] [Tester] Treating images...")
@@ -105,65 +108,65 @@ if __name__ == "__main__":
 
     for batchStart in range(0, len(imgs), batchSize):
         batchEnd = min(batchStart + batchSize, len(imgs))
-        batchImgs = imgs[batchStart:batchEnd]
-        batchNoLinesImgs = noLinesImgs[batchStart:batchEnd]
-
-        # Pass the batch through the network
-        outputs = network(batchImgs)  # Output shape: [batch_size, 1, height, width]
-
+        batchImgs = imgs[batchStart:batchEnd].to("cuda")
+        batchNoLinesImgs = noLinesImgs[batchStart:batchEnd].to("cuda")
+        print("a")
+        outputs = network(batchImgs)
+        print("b")
         for idx, outputImg in enumerate(outputs):
             imgIdx = batchStart + idx
+            final = (outputImg.detach().cpu().squeeze() * 255).numpy()
+
             if args.show:
                 plt.subplot(5, numberOfImagesToTest, numberOfImagesToTest + imgIdx + 1)
                 plt.title(f"Detected {imgIdx}")
-                plt.imshow(
-                    (outputImg.detach().cpu().squeeze() * 255).numpy(),
-                    cmap="gray",
-                )
+                plt.imshow(final, cmap="gray")
                 plt.subplot(
                     5, numberOfImagesToTest, numberOfImagesToTest * 2 + imgIdx + 1
                 )
                 plt.title(f"Output {imgIdx}")
-                plt.imshow(
-                    ((outputImg).detach().cpu().squeeze() * 255).numpy(),
-                    cmap="gray",
-                )
+                plt.imshow(final, cmap="gray")
                 plt.subplot(
                     5, numberOfImagesToTest, numberOfImagesToTest * 3 + imgIdx + 1
                 )
                 plt.title(f"Final {imgIdx}")
-                final = (outputImg.detach().cpu().squeeze() * 255).numpy()
                 plt.imshow(
-                    thresholdImage(final) if args.postprocess else final,
-                    cmap="gray",
+                    thresholdImage(final) if args.postprocess else final, cmap="gray"
                 )
-
             pixelLoss = loss(outputImg.unsqueeze(0), batchNoLinesImgs[idx].unsqueeze(0))
+            postProcessed = thresholdImage(final) if args.postprocess else final
+            tensorPostProcessed = (
+                ToTensor()(postProcessed).to("cuda").permute(0, 2, 1).unsqueeze(0)
+            )
 
             pPLoss = torch.sqrt(
-                loss(
-                    ToTensor()(thresholdImage(final) if args.postprocess else final)
-                    .to("cuda")
-                    .permute(0, 2, 1)
-                    .unsqueeze(0),
-                    batchNoLinesImgs[idx].unsqueeze(0),
-                )
+                loss(tensorPostProcessed, batchNoLinesImgs[idx].unsqueeze(0))
             )
+            pPlos = 10
+
             if args.loss:
                 print(
-                    f"[LineRemoverNN] [Tester] Image {imgIdx} loss : {pixelLoss.item()} final loss : {pPLoss.item()}"
+                    f"[LineRemoverNN] [Tester] Image {imgIdx} loss : {pixelLoss.item()} final loss : {5}"
                 )
                 totalLoss += pixelLoss.item()
+            del pixelLoss
+            #del tensorPostProcessed, pixelLoss, pPLoss, postProcessed
+            torch.cuda.empty_cache()
+
+        del batchImgs, batchNoLinesImgs, outputs
+        torch.cuda.empty_cache()
+        gc.collect()
 
     elapsedTime = time.time_ns() - startedTime
     elapsedTimeSeconds = elapsedTime / 1e9
     print(
-        f"[LineRemoverNN] [Tester] Treated {len(imgs)} images in {elapsedTimeSeconds} seconds"
+        f"[LineRemoverNN] [Tester] Treated {len(imgs)} images in {elapsedTimeSeconds:.2f} seconds"
     )
 
     if args.loss:
-        print(f"[LineRemoverNN] [Tester] Avg loss : {totalLoss / len(imgs)}")
+        print(f"[LineRemoverNN] [Tester] Avg loss : {totalLoss / len(imgs):.6f}")
 
     if args.show:
         plt.subplots_adjust(hspace=0.5)
         plt.show()
+        plt.close("all")  # Free matplotlib memory

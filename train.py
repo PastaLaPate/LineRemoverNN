@@ -17,8 +17,8 @@ from torch.utils.data import DataLoader
 
 from models.model import NeuralNetwork
 from models.loss import *
-from models.test_model import UNet
 from data.IAM import IAMPages, reconstruct_image, IAMPagesSplitted
+from torch.amp import autocast, GradScaler
 
 device = (
     "cuda"
@@ -56,24 +56,58 @@ def getBestModelPath():
     return bestModelPath, bestModelEpoch
 
 
-def loadBestModel() -> NeuralNetwork:
+def loadBestModel(
+    device="cuda",
+) -> tuple[nn.Module, torch.optim.Optimizer, GradScaler, int]:
+    from torch.cuda.amp import GradScaler
+
     bestModelPath, epochs = getBestModelPath()
     if bestModelPath is None:
         print(
             "[LineRemoverNN] [Model Loader] FATAL: No model found to load, exiting..."
         )
         exit(1)
-    network = NeuralNetwork()
-    network.load_state_dict(torch.load(bestModelPath, weights_only=True))
+
+    checkpoint = torch.load(bestModelPath, map_location=device)
+
+    network = NeuralNetwork().to(device)
+    network.load_state_dict(checkpoint["model_state"])
+
+    optimizer = torch.optim.Adam(network.parameters(), lr=1e-4)
+    optimizer.load_state_dict(checkpoint["optimizer_state"])
+
+    # Ensure optimizer tensors are on the correct device
+    for state in optimizer.state.values():
+        for k, v in state.items():
+            if isinstance(v, torch.Tensor):
+                state[k] = v.to(device)
+
+    scaler = GradScaler("cuda")
+    if "scaler" in checkpoint:
+        scaler.load_state_dict(checkpoint["scaler"])
+
     print(
-        f"[LineRemoverNN] [Model Loader] Loading {bestModelPath} which has {epochs+1} epochs"
+        f"[LineRemoverNN] [Model Loader] Loading {bestModelPath} which has {epochs + 1} epochs"
     )
-    return network
+    return network, optimizer, scaler, epochs
 
 
 def init_weights(m):
     if isinstance(m, nn.Conv2d):
         nn.init.kaiming_normal_(m.weight, nonlinearity="leaky_relu")
+
+
+def save_checkpoint(model, optimizer, scaler, epoch, path):
+    torch.save(
+        {
+            "model_state": model.state_dict(),
+            "optimizer_state": optimizer.state_dict(),
+            "scaler": scaler.state_dict(),
+            "epoch": epoch,
+        },
+        path,
+    )
+    print(f'[LineRemoverNN] [Trainer] Model saved at "{path}"')
 
 
 if __name__ == "__main__":
@@ -96,13 +130,6 @@ if __name__ == "__main__":
         action="store_true",
         default=False,
     )
-    argsParser.add_argument(
-        "-lo",
-        "--loss",
-        required=True,
-        help="Loss function to use : VGG, SSIM, L1 or BCE Loss",
-        choices=["vgg", "ssim", "bce", "l1"],
-    )
     args = argsParser.parse_args()
 
     data_dir = args.dataset
@@ -115,7 +142,7 @@ if __name__ == "__main__":
 
     # Init network, dataset, dataloader, loss, and optimizer
 
-    network = UNet(1, 1).to(device)  # NeuralNetwork().to(device)
+    network = NeuralNetwork().to(device)
     dataset = IAMPagesSplitted(
         pages_blocks_dir,
         nolines_blocks_dir,
@@ -134,37 +161,27 @@ if __name__ == "__main__":
         sameTransform=True,
     )
     dataloader = DataLoader(
-        dataset, batch_size=8, shuffle=True, collate_fn=collate_fn, num_workers=8
+        dataset, batch_size=4, shuffle=True, collate_fn=collate_fn, num_workers=8
     )
-    optimizer = torch.optim.Adam(network.parameters(), lr=0.001)
+    optimizer = torch.optim.Adam(network.parameters(), lr=0.0001)
     epochs = args.epoch
-    loss = VGGLoss()
-    l_name = "VGG"
-    if args.loss == "vgg":
-        loss = VGGLoss()
-    elif args.loss == "ssim":
-        loss = SSIM_L1_Loss()
-        l_name = "SSIM"
-    elif args.loss == "bce":
-        loss = BCEL1Loss()
-        l_name = "BCE"
-    elif args.loss == "l1":
-        loss = nn.L1Loss()
-    print("[LineRemoverNN] [Trainer] Using loss function : ", l_name)
+    loss = nn.MSELoss()
     startingEpoch = 0
     network.apply(init_weights)
-
-    # Load model if specified
-
-    if args.load:
-        # Getting the bestModel
-        network = loadBestModel().to(device)
 
     # Create saved folder if not already created
     if not os.path.exists(os.path.join("./models", "saved")):
         os.mkdir(os.path.join("./models", "saved"))
 
     # Training...
+    scaler = GradScaler(device)
+
+    # Load model if specified
+    if args.load:
+        # Getting the bestModel
+        network, optimizer, scaler, startingEpoch = loadBestModel()
+        startingEpoch += 1  # We want to start the next epoch
+        network.to(device)
     print(
         "[LineRemoverNN] [Trainer] Starting training... for",
         epochs - startingEpoch,
@@ -182,14 +199,18 @@ if __name__ == "__main__":
             linesImages, noLines = linesImages.to(device), noLines.to(device)
 
             optimizer.zero_grad()
-            processedFilters = network(linesImages)
+            with autocast(device_type=device):
+                processedFilters = network(linesImages)
 
-            # Compute loss between the subtracted image and the target (noLines)
-            pixelLoss = loss(processedFilters, noLines)
+                # Compute loss between the subtracted image and the target (noLines)
+                pixelLoss = torch.sqrt(loss(processedFilters, noLines))
 
             # Back prog
-            pixelLoss.backward()
-            optimizer.step()
+            scaler.scale(pixelLoss).backward()
+            scaler.step(optimizer)
+            scaler.update()
+            # pixelLoss.backward()
+            # optimizer.step()
 
             totalLoss += pixelLoss.item()
 
@@ -219,7 +240,16 @@ if __name__ == "__main__":
             )
 
         # Save each epoch
-        torch.save(network.state_dict(), f"./models/saved/epoch-{epoch}.pt")
+        save_checkpoint(
+            network,
+            optimizer,
+            scaler,
+            epoch,
+            os.path.join(
+                os.path.realpath(os.path.dirname(__file__)),
+                f"models/saved/epoch-{epoch}.pt",
+            ),
+        )
         print(
             f'[LineremoverNN] [Trainer] Model saved at "./models/saved/epoch-{epoch}.pt"'
         )

@@ -241,9 +241,7 @@ def make_page(args):
     lines = []  # List to store y-coordinates of lines
     wordsL = []  # List to store metadata about the words on the page
     gS = 255  # Grayscale value (used for line color)
-    hasImperfectArcs = (
-        bool(randint(0, 1)) if extended else False
-    )  # Randomly decide whether to add arcs
+    hasImperfectArcs = False  # bool(randint(0, 1)) if extended else False  # Randomly decide whether to add arcs
     skipLineProb = (
         1 / 4 if extended else 0
     )  # Probability of skipping one or multiple lines

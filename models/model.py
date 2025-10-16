@@ -10,118 +10,123 @@ device = (
 print(f"[LineRemoverNN] Using {device} device")
 
 
-class CBAM(nn.Module):
-    def __init__(self, channels):
-        super(CBAM, self).__init__()
-        self.avg_pool = nn.AdaptiveAvgPool2d(1)
-        self.fc = nn.Sequential(
-            nn.Linear(channels, channels // 4),
-            nn.ReLU(),
-            nn.Linear(channels // 4, channels),
-            nn.Sigmoid(),
-        )
-
-    def forward(self, x):
-        avg_out = self.fc(self.avg_pool(x).view(x.size(0), -1))
-        avg_out = avg_out.view(x.size(0), x.size(1), 1, 1)
-        return x * avg_out
-
-
-class EncoderBlock(nn.Module):
-    def __init__(
-        self, in_channels, out_channels, stride=1, kernel_size=3, dilation=1, padding=1
-    ):
-        super(EncoderBlock, self).__init__()
-        self.conv1 = nn.Conv2d(
-            in_channels,
-            out_channels,
-            kernel_size=kernel_size,
-            padding=padding,
-            stride=stride,
-            dilation=dilation,
-        )
-        self.batch_norm1 = nn.BatchNorm2d(out_channels)
-        self.relu = nn.ReLU()
-        self.block = nn.Sequential(self.conv1, self.batch_norm1, self.relu)
-
-    def forward(self, x):
-        return self.block(x)
-
-
-class ResidualBlock(nn.Module):
-    def __init__(self, filters=128):
+class ConvBlock(nn.Module):
+    def __init__(self, in_ch, out_ch):
         super().__init__()
-        self.conv = nn.Conv2d(filters, filters, kernel_size=3, padding=1)
-        self.relu = nn.ReLU()
-        self.conv2 = nn.Conv2d(filters, filters, kernel_size=3, padding=1)
-        self.relu2 = nn.ReLU()
-
-    def forward(self, x):
-        res = self.relu(self.conv(x))
-        res = self.conv2(res)
-        return self.relu2(res + x)
-
-
-class DecoderBlock(nn.Module):
-    def __init__(self, in_channels, out_channels, stride=1):
-        super(DecoderBlock, self).__init__()
-        self.conv1 = nn.ConvTranspose2d(
-            in_channels,
-            out_channels,
-            kernel_size=3,
-            stride=stride,
-            padding=1,
-            output_padding=1,
+        self.conv = nn.Sequential(
+            nn.Conv2d(in_ch, out_ch, kernel_size=3, padding=1),
+            nn.BatchNorm2d(out_ch),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(out_ch, out_ch, kernel_size=3, padding=1),
+            nn.BatchNorm2d(out_ch),
+            nn.ReLU(inplace=True),
         )
-        self.relu = nn.ReLU()
-        self.block = nn.Sequential(self.conv1, self.relu)
 
     def forward(self, x):
-        return self.block(x)
+        return self.conv(x)
 
 
+class AttentionBlock(nn.Module):
+    def __init__(self, F_g, F_l, F_int):
+        super().__init__()
+        self.W_g = nn.Sequential(
+            nn.Conv2d(F_g, F_int, kernel_size=1),
+            nn.BatchNorm2d(F_int),
+        )
+        self.W_x = nn.Sequential(
+            nn.Conv2d(F_l, F_int, kernel_size=1),
+            nn.BatchNorm2d(F_int),
+        )
+        self.psi = nn.Sequential(
+            nn.Conv2d(F_int, 1, kernel_size=1), nn.BatchNorm2d(1), nn.Sigmoid()
+        )
+
+    def forward(self, g, x):
+        g1 = self.W_g(g)
+        x1 = self.W_x(x)
+        psi = self.psi(F.relu(g1 + x1))
+        return x * psi
+
+"""
 class NeuralNetwork(nn.Module):
     def __init__(self):
-        super(NeuralNetwork, self).__init__()
+        super().__init__()
+        self.enc1 = ConvBlock(1, 64)
+        self.enc2 = ConvBlock(64, 128)
+        self.enc3 = ConvBlock(128, 256)
+        self.enc4 = ConvBlock(256, 512)
 
-        # Encoder
-        self.enc1 = EncoderBlock(
-            1, 32, stride=1, kernel_size=3, padding=1
-        )  # 512x512 -> 512x512
-        self.enc2 = EncoderBlock(
-            32, 64, stride=2, kernel_size=7, padding=3
-        )  # 512x512 -> 256x256
-        self.enc3 = EncoderBlock(
-            64, 128, kernel_size=5, stride=2, dilation=2, padding=4
-        )  # 256x256 -> 128x128
+        self.pool = nn.MaxPool2d(2)
 
-        # Bottleneck Residual Blocks
-        self.residuals = nn.Sequential(
-            ResidualBlock(128), ResidualBlock(128), CBAM(128)
-        )
+        self.center = ConvBlock(512, 1024)
 
-        # Decoder
-        self.dec1 = DecoderBlock(128, 64, stride=2)  # 128x128 -> 256x256
-        self.dec2 = DecoderBlock(64, 32, stride=2)  # 256x256 -> 512x512
-        self.dec3 = nn.Conv2d(32, 1, kernel_size=3, padding=1)  # 512x512 -> 512x512
+        self.att4 = AttentionBlock(512, 512, 256)
+        self.att3 = AttentionBlock(256, 256, 128)
+        self.att2 = AttentionBlock(128, 128, 64)
+        self.att1 = AttentionBlock(64, 64, 32)
+
+        self.up4 = nn.ConvTranspose2d(1024, 512, kernel_size=2, stride=2)
+        self.up3 = nn.ConvTranspose2d(512, 256, kernel_size=2, stride=2)
+        self.up2 = nn.ConvTranspose2d(256, 128, kernel_size=2, stride=2)
+        self.up1 = nn.ConvTranspose2d(128, 64, kernel_size=2, stride=2)
+
+        self.dec4 = ConvBlock(1024, 512)
+        self.dec3 = ConvBlock(512, 256)
+        self.dec2 = ConvBlock(256, 128)
+        self.dec1 = ConvBlock(128, 64)
+
+        self.out = nn.Conv2d(64, 1, kernel_size=1)
 
     def forward(self, x):
-        # Encoding
-        # [-1, 1]
-        x = (x - 0.5) / 0.5
-        x1 = self.enc1(x)
-        x2 = self.enc2(x1)
-        x3 = self.enc3(x2)
+        e1 = self.enc1(x)
+        e2 = self.enc2(self.pool(e1))
+        e3 = self.enc3(self.pool(e2))
+        e4 = self.enc4(self.pool(e3))
 
-        # Bottleneck
-        x3 = self.residuals(x3)
+        center = self.center(self.pool(e4))
 
-        # Decoding
-        x4 = self.dec1(x3) + x2
-        x5 = self.dec2(x4) + x1
-        # [-1, 1]
-        out = torch.tanh(self.dec3(x5))
-        # Rescale output to [0, 1] to match original image range
-        out = (out + 1) / 2
-        # Ensure x - out stays in range [0, 1]
-        return torch.clamp(x - out, 0, 1)
+        d4 = self.up4(center)
+        e4 = self.att4(d4, e4)
+        d4 = self.dec4(torch.cat([d4, e4], dim=1))
+
+        d3 = self.up3(d4)
+        e3 = self.att3(d3, e3)
+        d3 = self.dec3(torch.cat([d3, e3], dim=1))
+
+        d2 = self.up2(d3)
+        e2 = self.att2(d2, e2)
+        d2 = self.dec2(torch.cat([d2, e2], dim=1))
+
+        d1 = self.up1(d2)
+        e1 = self.att1(d1, e1)
+        d1 = self.dec1(torch.cat([d1, e1], dim=1))
+
+        return self.out(d1)  # raw
+"""
+class NeuralNetwork(nn.Module):
+    def __init__(self, *args, **kwargs):
+        super().__init__()
+        self.conv1 = nn.Conv2d(1, 32, kernel_size=21, padding=10, padding_mode='reflect')
+        self.bn1 = nn.BatchNorm2d(32)
+        self.lr1 = nn.LeakyReLU(inplace=True)
+        self.l1 = nn.Sequential(self.conv1, self.bn1, self.lr1)
+        self.conv2 = nn.Conv2d(32, 32, kernel_size=11, padding=5, padding_mode='reflect')
+        self.bn2 = nn.BatchNorm2d(32)
+        self.lr2 = nn.LeakyReLU(inplace=True)
+        self.l2 = nn.Sequential(self.conv2, self.bn2, self.lr2)
+        self.conv3 = nn.Conv2d(32, 32, kernel_size=7, padding=3, padding_mode='reflect')
+        self.bn3 = nn.BatchNorm2d(32)
+        self.lr3 = nn.LeakyReLU(inplace=True)
+        self.l3 = nn.Sequential(self.conv3, self.bn3, self.lr3)
+        self.conv4 = nn.Conv2d(32, 1, kernel_size=3, padding=1, padding_mode='reflect')
+        self.lr4 = nn.LeakyReLU(inplace=True)
+        self.bn4 = nn.BatchNorm2d(1)
+        self.l4 = nn.Sequential(self.conv4, self.bn4, self.lr4)
+
+    def forward(self, _in):
+
+        x = self.l1(_in)
+        x = self.l2(x)
+        x = self.l3(x)
+        x = self.l4(x)
+        return x - _in

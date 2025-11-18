@@ -1,4 +1,5 @@
 import os
+import random
 from torchvision.io import read_image
 import torch
 import json
@@ -27,34 +28,36 @@ device = (
     else "mps" if torch.backends.mps.is_available() else "cpu"
 )
 
-
 def split_into_blocks(
     image: Union[np.ndarray, Tensor], block_size=512, transform=None
 ) -> List[np.ndarray]:
-    """
-    ## Split an ndarray into blocks of ``block_size``
-    ### Params:
-      image: The image to split ``ndarray`` Required
-      block_size: The size of a block ``int`` (default: 512)
-      transform: Eventual transform applied to each image ``func`` (default: None)
-    ### Returns:
-      List[numpy.ndarray] : the list of each block
-    """
-    # Get original image dimensions
     if isinstance(image, np.ndarray):
-        image = ToTensor()(image)
-    _, height, width = image.shape  # Assuming (C, H, W)
+        image = ToTensor()(image)  # yields float tensor in [0,1]
+    _, height, width = image.shape
 
-    # Calculate the padded dimensions
     padded_height = ((height + block_size - 1) // block_size) * block_size
     padded_width = ((width + block_size - 1) // block_size) * block_size
 
-    # Pad the image with black (0 value)
-    pad_bottom = padded_height - height
-    pad_right = padded_width - width
-    padded_image = F.pad(image, (0, pad_right, 0, pad_bottom), mode="constant", value=0)
+    pad_bottom_total = padded_height - height
+    pad_right_total = padded_width - width
 
-    # Extract blocks
+    # Randomly distribute padding between before/after (top/bottom and left/right)
+    pad_top = random.randint(0, pad_bottom_total) if pad_bottom_total > 0 else 0
+    pad_bottom = pad_bottom_total - pad_top
+
+    pad_left = random.randint(0, pad_right_total) if pad_right_total > 0 else 0
+    pad_right = pad_right_total - pad_left
+
+    # Choose pad value and scale for float tensors (ToTensor -> float in [0,1])
+    if image.dtype.is_floating_point:
+        pad_val = random.randint(0, 255) / 255.0
+    else:
+        pad_val = random.randint(0, 255)
+
+    # F.pad expects (pad_left, pad_right, pad_top, pad_bottom)
+    padded_image = F.pad(image, (pad_left, pad_right, pad_top, pad_bottom),
+                         mode="constant", value=pad_val)
+
     blocks = []
     for i in range(0, padded_height, block_size):
         for j in range(0, padded_width, block_size):

@@ -1,6 +1,7 @@
 import torch
 from train import loadBestModel
 from torchvision.io import read_image
+import torchvision.transforms.v2 as v2
 import torchvision
 import matplotlib.pyplot as plt
 from postProcessing import thresholdImage
@@ -74,6 +75,10 @@ if __name__ == "__main__":
             else 2
         ),
     )
+    if args.show:
+        plt.figure(figsize=(numberOfImagesToTest * 3, 15))  # width scales with N
+
+    transforms = v2.Compose([v2.RandomResizedCrop(size=(512, 512), scale=(0.6, 1.0)), v2.ToDtype(torch.float32, scale=True)])
     print("[LineRemoverNN] [Tester] Loading images...")
     for i in range(start, start + numberOfImagesToTest):
         pathImageTest = os.path.join(args.data, f"generated-pages-blocks/{i}.png")
@@ -91,16 +96,14 @@ if __name__ == "__main__":
             )
             plt.title(f"Goal {(i - start)}")
             plt.imshow(imgNoLine.squeeze().numpy(), cmap="gray")
-        img = img.float() / 255.0
-        imgNoLine = imgNoLine.float() / 255.0
-        imgs.append(img)
-        noLinesImgs.append(imgNoLine)
+        imgs.append(img.float() / 255.0)
+        noLinesImgs.append(imgNoLine.float() / 255.0)
 
     imgs = torch.stack(imgs)
     noLinesImgs = torch.stack(noLinesImgs)
 
     print("[LineRemoverNN] [Tester] Using RMSE Loss...")
-    loss = nn.MSELoss()
+    loss = combined_loss
 
     startedTime = time.time_ns()
     print("[LineRemoverNN] [Tester] Treating images...")
@@ -110,12 +113,14 @@ if __name__ == "__main__":
         batchEnd = min(batchStart + batchSize, len(imgs))
         batchImgs = imgs[batchStart:batchEnd].to("cuda")
         batchNoLinesImgs = noLinesImgs[batchStart:batchEnd].to("cuda")
-        print("a")
         outputs = network(batchImgs)
-        print("b")
         for idx, outputImg in enumerate(outputs):
             imgIdx = batchStart + idx
+            print(batchImgs[idx].min(), batchImgs[idx].max())
+            print(outputImg.min(), outputImg.max())
+            print(batchNoLinesImgs[idx].min(), batchNoLinesImgs[idx].max())
             final = (outputImg.detach().cpu().squeeze() * 255).numpy()
+            _in = (batchImgs[idx].detach().cpu().squeeze() * 255).numpy()
 
             if args.show:
                 plt.subplot(5, numberOfImagesToTest, numberOfImagesToTest + imgIdx + 1)
@@ -139,9 +144,7 @@ if __name__ == "__main__":
                 ToTensor()(postProcessed).to("cuda").permute(0, 2, 1).unsqueeze(0)
             )
 
-            pPLoss = torch.sqrt(
-                loss(tensorPostProcessed, batchNoLinesImgs[idx].unsqueeze(0))
-            )
+            pPLoss = loss(tensorPostProcessed, batchNoLinesImgs[idx].unsqueeze(0))
             pPlos = 10
 
             if args.loss:
@@ -169,4 +172,3 @@ if __name__ == "__main__":
     if args.show:
         plt.subplots_adjust(hspace=0.5)
         plt.show()
-        plt.close("all")  # Free matplotlib memory

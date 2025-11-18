@@ -152,20 +152,21 @@ if __name__ == "__main__":
             [
                 # Instead of random rotation + random perspective : Random affine https://pytorch.org/vision/main/auto_examples/transforms/plot_transforms_illustrations.html#randomaffine
                 # v2.RandomRotation(degrees=(0, 180)),
-                v2.RandomCrop(size=(128, 128)),
+                #v2.RandomCrop(size=(128, 128)),
                 # v2.RandomPerspective(distortion_scale=0.6, p=0.75),
-                v2.Resize(size=(512, 512)),
+                #v2.Resize(size=(512, 512)),
+                v2.RandomResizedCrop(size=(512, 512), scale=(0.6, 1.0)),
                 v2.ToDtype(torch.float32, scale=True),
             ]
         ),
         sameTransform=True,
     )
     dataloader = DataLoader(
-        dataset, batch_size=4, shuffle=True, collate_fn=collate_fn, num_workers=8
+        dataset, batch_size=8, shuffle=True, collate_fn=collate_fn, num_workers=16, pin_memory=True
     )
     optimizer = torch.optim.Adam(network.parameters(), lr=0.0001)
     epochs = args.epoch
-    loss = nn.MSELoss()
+    loss = combined_loss
     startingEpoch = 0
     network.apply(init_weights)
 
@@ -188,6 +189,8 @@ if __name__ == "__main__":
         "epochs",
     )
 
+    torch.backends.cudnn.benchmark = True  # For speed improvement
+
     for epoch in range(startingEpoch, epochs):
         torch.cuda.empty_cache()
         network.train()
@@ -201,9 +204,9 @@ if __name__ == "__main__":
             optimizer.zero_grad()
             with autocast(device_type=device):
                 processedFilters = network(linesImages)
-
-                # Compute loss between the subtracted image and the target (noLines)
-                pixelLoss = torch.sqrt(loss(processedFilters, noLines))
+            # Loss outside autocast to avoid issues with some loss functions
+            # Compute loss between the subtracted image and the target (noLines)
+            pixelLoss = loss(processedFilters.float(), noLines.float())
 
             # Back prog
             scaler.scale(pixelLoss).backward()

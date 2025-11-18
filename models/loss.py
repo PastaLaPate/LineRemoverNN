@@ -25,8 +25,4 @@ class PerceptualLoss(nn.Module):
 
 
 def combined_loss(pred_logits, target):
-    bce = F.binary_cross_entropy_with_logits(pred_logits, target)
-    pred = torch.sigmoid(pred_logits)  # Only for SSIM and perceptual
-    ssim_loss = 1 - ssim(pred, target, data_range=1.0, size_average=True)
-    perceptual = PerceptualLoss()(pred, target)
-    return bce + 0.5 * ssim_loss + 0.3 * perceptual
+    return 0.9 * F.l1_loss(pred_logits, target) + 0.1 * (1 - ssim(pred_logits, target, data_range=1.0, size_average=True))

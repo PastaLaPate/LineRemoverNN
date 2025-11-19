@@ -18,7 +18,8 @@ from torch.utils.data import DataLoader
 from models.model import NeuralNetwork
 from models.loss import *
 from data.IAM import IAMPages, reconstruct_image, IAMPagesSplitted
-from torch.amp import autocast, GradScaler
+from torch.amp.grad_scaler import GradScaler
+from torch.amp.autocast_mode import autocast
 
 device = (
     "cuda"
@@ -59,7 +60,6 @@ def getBestModelPath():
 def loadBestModel(
     device="cuda",
 ) -> tuple[nn.Module, torch.optim.Optimizer, GradScaler, int]:
-    from torch.cuda.amp import GradScaler
 
     bestModelPath, epochs = getBestModelPath()
     if bestModelPath is None:
@@ -152,9 +152,9 @@ if __name__ == "__main__":
             [
                 # Instead of random rotation + random perspective : Random affine https://pytorch.org/vision/main/auto_examples/transforms/plot_transforms_illustrations.html#randomaffine
                 # v2.RandomRotation(degrees=(0, 180)),
-                #v2.RandomCrop(size=(128, 128)),
+                # v2.RandomCrop(size=(128, 128)),
                 # v2.RandomPerspective(distortion_scale=0.6, p=0.75),
-                #v2.Resize(size=(512, 512)),
+                # v2.Resize(size=(512, 512)),
                 v2.RandomResizedCrop(size=(512, 512), scale=(0.6, 1.0)),
                 v2.ToDtype(torch.float32, scale=True),
             ]
@@ -162,7 +162,12 @@ if __name__ == "__main__":
         sameTransform=True,
     )
     dataloader = DataLoader(
-        dataset, batch_size=10, shuffle=True, collate_fn=collate_fn, num_workers=2, pin_memory=True
+        dataset,
+        batch_size=10,
+        shuffle=True,
+        collate_fn=collate_fn,
+        num_workers=2,
+        pin_memory=True,
     )
     optimizer = torch.optim.Adam(network.parameters(), lr=0.0001)
     epochs = args.epoch

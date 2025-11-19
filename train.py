@@ -162,7 +162,7 @@ if __name__ == "__main__":
         sameTransform=True,
     )
     dataloader = DataLoader(
-        dataset, batch_size=8, shuffle=True, collate_fn=collate_fn, num_workers=16, pin_memory=True
+        dataset, batch_size=10, shuffle=True, collate_fn=collate_fn, num_workers=2, pin_memory=True
     )
     optimizer = torch.optim.Adam(network.parameters(), lr=0.0001)
     epochs = args.epoch

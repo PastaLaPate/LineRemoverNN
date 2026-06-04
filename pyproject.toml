@@ -10,9 +10,12 @@ dependencies = [
     "matplotlib>=3.10.8",
     "opencv-python>=4.13.0.92",
     "pillow>=12.1.1",
+    "pre-commit>=4.6.0",
+    "ruff>=0.15.16",
     "torch>=2.9.0",
     "torchvision==0.24.0",
     "tqdm>=4.67.3",
+    "ty>=0.0.43",
 ]
 
 

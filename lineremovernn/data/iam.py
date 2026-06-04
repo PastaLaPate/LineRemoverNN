@@ -12,17 +12,19 @@ from lineremovernn.utils import logging
 
 logger = logging.get_logger("IAM")
 
+
 class IAMDataset(DownloadableDataset):
     ID = "IAM"
+
     def __init__(self):
         super().__init__()
-    
+
     def __len__(self):
         return 0
 
     def __getitem__(self, idx):
         return None
-    
+
     @classmethod
     def download(cls, download_path: str, force: bool = False):
         dataset_path = Path(download_path) / "IAM_Words"
@@ -34,10 +36,10 @@ class IAMDataset(DownloadableDataset):
             raise FileExistsError(
                 f"Dataset already exists at {dataset_path}. Use force=True to re-download."
             )
-    
+
     @classmethod
     def extract(cls, download_path: str, dataset_path: str, force: bool = False):
-        dl = Path(download_path) / "IAM_Words"
+        dl = Path(download_path) / "IAM_Words" / "IAM_Words"
         logger.info("Extracting words.tgz...")
         if not (Path(dataset_path) / "words").exists() or force:
             with tarfile.open(dl / "words.tgz") as f:
@@ -56,7 +58,7 @@ class IAMDataset(DownloadableDataset):
             )
 
         logger.info("Done.")
-    
+
     @classmethod
     def _download_and_unzip(
         cls, url: str, extract_to: Path, chunk_size: int = 1024 * 1024

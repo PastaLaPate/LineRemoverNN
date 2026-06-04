@@ -1,7 +1,6 @@
+from lineremovernn.commands.download_dataset import DownloadDatasetCommand
 from .command import Command
 
-commands: list[Command] = [
-]
+commands: list[Command] = [DownloadDatasetCommand()]
 
-__all__ = [
-]
+__all__ = []

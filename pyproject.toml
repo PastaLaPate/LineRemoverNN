@@ -1,0 +1,50 @@
+[project]
+name = "lineremovernn"
+version = "0.0.1"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.14"
+dependencies = [
+    "colorama>=0.4.6",
+    "distro>=1.9.0",
+    "matplotlib>=3.10.8",
+    "opencv-python>=4.13.0.92",
+    "pillow>=12.1.1",
+    "torch>=2.9.0",
+    "torchvision==0.24.0",
+    "tqdm>=4.67.3",
+]
+
+
+[build-system]
+requires = ["pdm-backend >= 2.4.0"]
+build-backend = "pdm.backend"
+
+[tool.setuptools]
+py-modules = []
+
+[tool.uv]
+default-groups = []
+
+[tool.uv.workspace]
+members = ["."]
+
+[[tool.uv.index]]
+name = "pytorch-cu130"
+url = "https://download.pytorch.org/whl/cu130"
+explicit = true
+
+[tool.uv.sources]
+lineremovernn = { workspace = true }
+torch = [
+  { index = "pytorch-cu130", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
+]
+torchvision = [
+  { index = "pytorch-cu130", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
+]
+
+[dependency-groups]
+dev = ["lineremovernn", "pre-commit>=4.5.1"]
+
+[project.scripts]
+lineremovernn = "lineremovernn.__main__:main"

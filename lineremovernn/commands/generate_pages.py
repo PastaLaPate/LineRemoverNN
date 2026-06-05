@@ -5,7 +5,7 @@ from lineremovernn.commands.command import Command
 from lineremovernn.data.generation.pages_generator import generate
 from lineremovernn.utils import logging
 
-logger = logging.get_logger("DatasetDownloader")
+logger = logging.get_logger("PageGenerator")
 
 
 class GeneratePagesCommand(Command):

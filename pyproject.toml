@@ -13,6 +13,7 @@ dependencies = [
     "pre-commit>=4.6.0",
     "ruff>=0.15.16",
     "torch>=2.9.0",
+    "torchinfo>=1.8.0",
     "torchvision==0.24.0",
     "tqdm>=4.67.3",
     "ty>=0.0.43",

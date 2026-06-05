@@ -15,7 +15,6 @@ Parallelism
 """
 
 from __future__ import annotations
-from PIL.Image import Resampling
 
 import argparse
 import io
@@ -28,10 +27,11 @@ from typing import NamedTuple
 
 import numpy as np
 from PIL import Image, ImageDraw
+from PIL.Image import Resampling
 from tqdm import tqdm
 
-from lineremovernn.data.pages import PagesDataset
 from lineremovernn.data.iam import IAMDataset
+from lineremovernn.data.pages import PagesDataset
 from lineremovernn.utils import logging
 
 logger = logging.get_logger("PageGenerator")
@@ -176,7 +176,6 @@ def _open_word_image(raw: bytes) -> Image.Image | None:
     try:
         img = Image.open(io.BytesIO(raw)).convert("RGBA")
 
-        # FIXED: Crop 2 pixels from every edge to destroy IAM's black border artifacts
         orig_w, orig_h = img.size
         if orig_w > 4 and orig_h > 4:
             img = img.crop((2, 2, orig_w - 2, orig_h - 2))
@@ -184,7 +183,6 @@ def _open_word_image(raw: bytes) -> Image.Image | None:
         data = np.array(img)
         brightness = data[..., :3].mean(axis=2)
 
-        # FIXED: More aggressive threshold (160 instead of 200) to blast away gray noise
         bg_mask = brightness > 160
 
         data[bg_mask] = [255, 255, 255, 0]
@@ -218,9 +216,8 @@ def _draw_lines_layer(
     n_lines = (H - params.margin_top) // params.line_spacing
     sub = rng.randint(3, 6)
 
-    # FIXED: Added vertical grid lines for the entire page
     for x_v in range(0, W, params.line_spacing):
-        v_darkness = rng.randint(220, 245)  # Faint vertical lines
+        v_darkness = rng.randint(100, 180)  # Faint vertical lines
         draw.line([(x_v, 0), (x_v, H)], fill=v_darkness, width=1)
 
     for i in range(n_lines + 1):
@@ -235,7 +232,6 @@ def _draw_lines_layer(
             y_off = rng.randint(-3, 3)
 
             if use_arc:
-                # FIXED: Massively increased amplitude for pronounced arcs
                 amplitude = rng.uniform(-15.0, 15.0)
                 step = max(1, W // 120)
                 pts = []
@@ -252,7 +248,6 @@ def _draw_lines_layer(
                     width=lw,
                 )
 
-    # Vertical main margin line (darker/thicker)
     draw.line(
         [(params.margin_left, 0), (params.margin_left, H)],
         fill=rng.randint(140, 200),
@@ -390,7 +385,6 @@ def generate(
         initializer=_worker_init,
         initargs=(words, cache),
     ) as pool:
-        # Pass the arguments directly to submit instead of unpacking a tuple
         futures = [
             pool.submit(_render_task, i, seed, use_arc, ruled_str, clean_str)
             for i in range(n)
@@ -405,10 +399,6 @@ def generate(
 
     logger.info("Done. %d ruled + %d clean pages written.", n, n)
 
-
-# ---------------------------------------------------------------------------
-# CLI
-# ---------------------------------------------------------------------------
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(

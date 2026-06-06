@@ -56,6 +56,12 @@ class TrainCommand(Command):
             help="Load a previously trained model to continue training.",
         )
         parser.add_argument(
+            "-ex",
+            "--extended",
+            action="store_true",
+            help="Uses extended augmentations.",
+        )
+        parser.add_argument(
             "-d",
             "--dataset",
             type=Path,
@@ -84,12 +90,36 @@ class TrainCommand(Command):
                 latest_model = load_model(lm[1])
                 current_epoch = latest_model.stats.epoch
 
-        transforms = v2.Compose(
-            [
-                v2.RandomCrop((256, 256)),
-                v2.RandomRotation((-0.5, 0.5)),
-                v2.ToDtype(torch.float32, scale=True),
-            ]
+        transforms = (
+            v2.Compose(
+                [
+                    v2.RandomCrop((256, 256)),
+                    v2.RandomRotation((-0.5, 0.5)),
+                    v2.ToDtype(torch.float32, scale=True),
+                ]
+            )
+            if not args.extended
+            else v2.Compose(
+                [
+                    v2.RandomPerspective(distortion_scale=0.15, p=0.5, fill=255),
+                    v2.RandomAffine(
+                        degrees=(-1.5, 1.5),
+                        scale=(0.75, 1.3),
+                        shear=(
+                            -4,
+                            4,
+                        ),
+                        fill=0,
+                    ),
+                    v2.RandomCrop(
+                        (256, 256),
+                        pad_if_needed=True,
+                        fill=0,
+                        padding_mode="constant",
+                    ),
+                    v2.ToDtype(torch.float32, scale=True),
+                ]
+            )
         )
         dataset = PagesDataset(transforms)
         dataloader: DataLoader[PagesDataset] = DataLoader(

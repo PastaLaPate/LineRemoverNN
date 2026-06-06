@@ -1,7 +1,9 @@
+import logging
 from abc import ABC, abstractmethod
 from pathlib import Path
-from torch.utils.data import Dataset as TorchADataset
 from typing import Any
+
+from torch.utils.data import Dataset as TorchADataset
 
 from lineremovernn.utils.consts import DEFAULT_DATASETS, DEFAULT_DOWNLOADS
 
@@ -10,6 +12,8 @@ Dataset -> Standard class, name, path, etc.
   DownloadableDataset -> Dataset with download method, to download and extract. Ex: IAM, MNIST
   TorchDataset -> Dataset that can be used with PyTorch DataLoader. Ex: PagesDataset
 """
+
+logger = logging.getLogger("Dataset")
 
 
 class Dataset(ABC):
@@ -39,7 +43,8 @@ class DownloadableDataset(Dataset):
     @classmethod
     def install(
         cls,
-        force: bool = False,
+        force_download: bool = False,
+        force_extract: bool = False,
         download_path: str | None = None,
         dataset_path: str | None = None,
     ):
@@ -48,17 +53,23 @@ class DownloadableDataset(Dataset):
         if dataset_path is None:
             dataset_path = str(cls.path())
 
-        if not Path(download_path).exists() or force:
-            cls.download(force=force, download_path=download_path)
+        if not Path(download_path).exists() or force_download:
+            cls.download(force=force_download, download_path=download_path)
         else:
-            print(f"{cls.ID} already downloaded at {download_path}")
+            logger.warning(
+                f"{cls.ID} already downloaded at {download_path}, use force download to re download it."
+            )
 
-        if not Path(dataset_path).exists() or force:
+        if not Path(dataset_path).exists() or force_extract:
             cls.extract(
-                force=force, download_path=download_path, dataset_path=dataset_path
+                force=force_extract,
+                download_path=download_path,
+                dataset_path=dataset_path,
             )
         else:
-            print(f"{cls.ID} already extracted at {dataset_path}")
+            logger.warning(
+                f"{cls.ID} already extracted at {dataset_path}, use force extract to re extract it."
+            )
 
     @classmethod
     @abstractmethod

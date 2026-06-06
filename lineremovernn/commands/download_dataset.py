@@ -22,7 +22,7 @@ class DownloadDatasetCommand(Command):
             "--output-dir",
             type=Path,
             required=False,
-            default="DEFAULT",
+            default=None,
             help="Directory to save the downloaded dataset.",
         )
         parser.add_argument(

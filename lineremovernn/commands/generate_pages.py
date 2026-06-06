@@ -23,6 +23,31 @@ class GeneratePagesCommand(Command):
             "-a", "--arc", action="store_true", help="Use slightly arced ruled lines"
         )
         parser.add_argument(
+            "-mw",
+            "--max-warp",
+            type=float,
+            default=0.1,
+            help="Maximum perspective warp factor for word crops (0.0 to disable, old default was 0.3)",
+        )
+        parser.add_argument(
+            "-il",
+            "--imperfect-lines",
+            action="store_true",
+            help="Inject tiny structural imperfections and gaps into rules",
+        )
+        parser.add_argument(
+            "-p",
+            "--preload",
+            action="store_true",
+            help="Preload the images in RAM.",
+        )
+        parser.add_argument(
+            "-j",
+            "--save-json",
+            action="store_true",
+            help="Export ground-truth word layout coordinates as JSON files",
+        )
+        parser.add_argument(
             "-s", "--seed", type=int, default=None, help="RNG seed for reproducibility"
         )
         parser.add_argument(
@@ -50,9 +75,13 @@ class GeneratePagesCommand(Command):
         generate(
             n=args.n,
             use_arc=args.arc,
+            imperfect_lines=args.imperfect_lines,
+            max_warp=args.max_warp,
+            save_json=args.save_json,
             seed=args.seed,
             iam_path=args.iam,
             target=args.out,
             workers=args.workers,
             io_workers=args.io_workers,
+            preload=args.preload,
         )

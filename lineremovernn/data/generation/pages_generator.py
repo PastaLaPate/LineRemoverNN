@@ -2,29 +2,28 @@
 generate_pages.py — Synthetic ruled/clean page generator from IAM word crops.
 
 Usage:
-    python generate_pages.py [--n 50] [--arc] [--seed 42] [--workers 4]
+    python generate_pages.py [--n 50] [--preload] [--arc] [--max-warp 0.05] [--imperfect-lines] [--save-json] [--seed 42] [--workers 4]
 
 Outputs:
-    <target>/ruled-pages/0.jpg, 1.jpg, ...
-    <target>/clean-pages/0.jpg,  1.jpg, ...
-
-Parallelism
------------
-* Image preloading  → ThreadPoolExecutor  (pure I/O, GIL irrelevant)
-* Page rendering    → ProcessPoolExecutor (CPU-bound PIL work)
+    <target>/ruled-pages/0.jpg, 1.jpg, ..., n.jpg
+    <target>/clean-pages/0.jpg,  1.jpg, ..., n.jpg
+    <target>/labels/0.json, 1.json, ..., n.json (Optional)
 """
 
 from __future__ import annotations
 
 import argparse
 import io
+import json
 import math
 import os
 import random
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_completed
+from functools import lru_cache
 from pathlib import Path
 from typing import NamedTuple
 
+import cv2
 import numpy as np
 from PIL import Image, ImageDraw
 from PIL.Image import Resampling
@@ -38,7 +37,7 @@ logger = logging.get_logger("PageGenerator")
 
 
 # ---------------------------------------------------------------------------
-# Data loading
+# Data loading & Dual-Caching Strategy
 # ---------------------------------------------------------------------------
 
 WordEntry = tuple[str, tuple[int, int, int, int], str, int]
@@ -66,6 +65,7 @@ def load_words(iam_path: Path) -> list[WordEntry]:
 
 
 def _read_one(path: str) -> tuple[str, bytes | None]:
+    """Used strictly during global preloading step."""
     try:
         with open(path, "rb") as f:
             return path, f.read()
@@ -73,7 +73,18 @@ def _read_one(path: str) -> tuple[str, bytes | None]:
         return path, None
 
 
+@lru_cache(maxsize=3000)
+def _worker_load_image_bytes(path: str) -> bytes | None:
+    """Bounded cache used within individual workers when upfront preloading is disabled."""
+    try:
+        with open(path, "rb") as f:
+            return f.read()
+    except Exception:
+        return None
+
+
 def preload_images(words: list[WordEntry], io_workers: int = 16) -> dict[str, bytes]:
+    """Preloads the entire dataset into a single dictionary using multi-threading."""
     paths = list({w[0] for w in words})
     cache: dict[str, bytes] = {}
 
@@ -138,14 +149,75 @@ def arc_y_offset(x: int, page_width: int, amplitude: float) -> float:
 
 
 # ---------------------------------------------------------------------------
-# Process-pool worker initialiser
+# Image Augmentations
 # ---------------------------------------------------------------------------
 
-_worker_cache: dict[str, bytes] = {}
-_worker_words: list = []
+
+def add_random_perspective(
+    img: Image.Image, max_warp: float, rng: random.Random
+) -> Image.Image:
+    if max_warp <= 0:
+        return img
+
+    width, height = img.size
+    src_points = np.array(
+        [[0, 0], [width, 0], [width, height], [0, height]], dtype=np.float32
+    )
+
+    max_dx = width * max_warp
+    max_dy = height * max_warp
+
+    dst_points = np.array(
+        [
+            [rng.uniform(-max_dx, max_dx), rng.uniform(-max_dy, max_dy)],
+            [width + rng.uniform(-max_dx, max_dx), rng.uniform(-max_dy, max_dy)],
+            [
+                width + rng.uniform(-max_dx, max_dx),
+                height + rng.uniform(-max_dy, max_dy),
+            ],
+            [rng.uniform(-max_dx, max_dx), height + rng.uniform(-max_dy, max_dy)],
+        ],
+        dtype=np.float32,
+    )
+
+    matrix = cv2.getPerspectiveTransform(src_points, dst_points)
+
+    corners = np.array(
+        [[0, 0, 1], [width, 0, 1], [width, height, 1], [0, height, 1]], dtype=np.float32
+    ).T
+    new_corners = matrix @ corners
+    new_corners /= new_corners[2]
+
+    min_x, min_y = new_corners[:2].min(axis=1)
+    max_x, max_y = new_corners[:2].max(axis=1)
+    new_width, new_height = max(1, int(max_x - min_x)), max(1, int(max_y - min_y))
+
+    translation = np.array(
+        [[1, 0, -min_x], [0, 1, -min_y], [0, 0, 1]], dtype=np.float32
+    )
+    final_matrix = translation @ matrix
+
+    img_np = np.array(img)
+    transformed = cv2.warpPerspective(
+        img_np,
+        final_matrix,
+        (new_width, new_height),
+        borderMode=cv2.BORDER_CONSTANT,
+        borderValue=(0, 0, 0, 0),
+    )
+
+    return Image.fromarray(transformed)
 
 
-def _worker_init(words: list, cache: dict[str, bytes]) -> None:
+# ---------------------------------------------------------------------------
+# Process-pool worker initializer
+# ---------------------------------------------------------------------------
+
+_worker_cache: dict[str, bytes] | None = None
+_worker_words: list[WordEntry] = []
+
+
+def _worker_init(words: list[WordEntry], cache: dict[str, bytes] | None) -> None:
     global _worker_cache, _worker_words
     _worker_words = words
     _worker_cache = cache
@@ -155,15 +227,28 @@ def _render_task(
     page_index: int,
     seed: int | None,
     use_arc: bool,
+    max_warp: float,
+    imperfect_lines: bool,
     ruled_dir: str,
     clean_dir: str,
+    labels_dir: str | None,
 ) -> int:
     rng = random.Random(None if seed is None else seed + page_index)
-    ruled_img, clean_img = render_page(
-        _worker_words, _worker_cache, rng, use_arc=use_arc
+    ruled_img, clean_img, labels = render_page(
+        _worker_words,
+        _worker_cache,
+        rng,
+        use_arc=use_arc,
+        max_warp=max_warp,
+        imperfect_lines=imperfect_lines,
     )
     ruled_img.save(f"{ruled_dir}/{page_index}.jpg", quality=92)
     clean_img.save(f"{clean_dir}/{page_index}.jpg", quality=92)
+
+    if labels_dir and labels:
+        with open(f"{labels_dir}/{page_index}.json", "w", encoding="UTF-8") as f:
+            json.dump(labels, f, indent=2)
+
     return page_index
 
 
@@ -209,6 +294,7 @@ def _draw_lines_layer(
     H: int,
     params: PageParams,
     use_arc: bool,
+    imperfect_lines: bool,
 ) -> Image.Image:
     layer = Image.new("L", (W, H), 255)
     draw = ImageDraw.Draw(layer)
@@ -242,11 +328,7 @@ def _draw_lines_layer(
                     draw.line(pts, fill=darkness, width=lw)
             else:
                 y_int = int(y_base) + y_off
-                draw.line(
-                    [(0, y_int), (W, y_int)],
-                    fill=darkness,
-                    width=lw,
-                )
+                draw.line([(0, y_int), (W, y_int)], fill=darkness, width=lw)
 
     draw.line(
         [(params.margin_left, 0), (params.margin_left, H)],
@@ -254,26 +336,35 @@ def _draw_lines_layer(
         width=rng.randint(2, 3),
     )
 
+    if imperfect_lines:
+        for _ in range(rng.randint(40, 120)):
+            hx = rng.randint(0, W)
+            hy = rng.randint(0, H)
+            hr = rng.randint(1, 4)
+            draw.ellipse([hx - hr, hy - hr, hx + hr, hy + hr], fill=255)
+
     return layer
 
 
 def render_page(
     words: list[WordEntry],
-    cache: dict[str, bytes],
+    cache: dict[str, bytes] | None,
     rng: random.Random,
     use_arc: bool = True,
-) -> tuple[Image.Image, Image.Image]:
+    max_warp: float = 0.0,
+    imperfect_lines: bool = False,
+) -> tuple[Image.Image, Image.Image, list[dict]]:
     params = random_page_params(rng)
     W, H = params.width, params.height
     n_lines = (H - params.margin_top) // params.line_spacing
 
     page_np = np.full((H, W), _PAPER_GRAY, dtype=np.uint8)
 
-    available = [w for w in words if w[0] in cache]
-
-    start_offset = rng.randint(0, max(0, len(available) - 1)) if available else 0
+    start_offset = rng.randint(0, max(0, len(words) - 1)) if words else 0
     word_idx = 0
     word_height = int(params.line_spacing * rng.uniform(0.58, 0.72))
+
+    placed_words = []
 
     for line_i in range(n_lines):
         if line_i in params.skipped:
@@ -286,16 +377,25 @@ def render_page(
 
         x_cursor = params.margin_left + rng.randint(0, 12)
 
-        while x_cursor < W - 20 and word_idx < len(available):
-            entry = available[(start_offset + word_idx) % len(available)]
+        while x_cursor < W - 20 and word_idx < len(words):
+            entry = words[(start_offset + word_idx) % len(words)]
             word_idx += 1
-            raw = cache.get(entry[0])
+
+            # Determine whether to read from global dictionary cache or local on-demand cache
+            if cache is not None:
+                raw = cache.get(entry[0])
+            else:
+                raw = _worker_load_image_bytes(entry[0])
+
             if raw is None:
                 continue
 
             word_img = _open_word_image(raw)
             if word_img is None:
                 continue
+
+            if max_warp > 0.0:
+                word_img = add_random_perspective(word_img, max_warp, rng)
 
             word_img = _make_ink_word(word_img, word_height)
             if word_img is None:
@@ -325,26 +425,41 @@ def render_page(
                 mask = alpha[wy0:wy1, wx0:wx1] > 0
                 page_np[py0:py1, px0:px1][mask] = gray[wy0:wy1, wx0:wx1][mask]
 
+                placed_words.append(
+                    {
+                        "text": entry[2],
+                        "x": int(px0),
+                        "y": int(py0),
+                        "w": int(px1 - px0),
+                        "h": int(py1 - py0),
+                    }
+                )
+
             x_cursor += ww + params.word_gap + rng.randint(-2, 4)
 
-    lines_layer = _draw_lines_layer(rng, W, H, params, use_arc)
+    lines_layer = _draw_lines_layer(rng, W, H, params, use_arc, imperfect_lines)
     lines_np = np.array(lines_layer)
 
     ruled_np = np.minimum(page_np, lines_np)
 
     clean_img = Image.fromarray(page_np).convert("RGB")
     ruled_img = Image.fromarray(ruled_np).convert("RGB")
-    return ruled_img, clean_img
+
+    return ruled_img, clean_img, placed_words
 
 
 # ---------------------------------------------------------------------------
-# Main generate function
+# Main orchestrating entry point
 # ---------------------------------------------------------------------------
 
 
 def generate(
     n: int = 50,
+    preload: bool = False,
     use_arc: bool = True,
+    max_warp: float = 0.0,
+    imperfect_lines: bool = False,
+    save_json: bool = False,
     seed: int | None = None,
     iam_path: Path | None = None,
     target: Path | None = None,
@@ -361,14 +476,27 @@ def generate(
     ruled_dir.mkdir(parents=True, exist_ok=True)
     clean_dir.mkdir(parents=True, exist_ok=True)
 
-    logger.info("Loading IAM dataset from %s", iam_path)
+    labels_dir = target / "labels" if save_json else None
+    if labels_dir:
+        labels_dir.mkdir(parents=True, exist_ok=True)
+
+    logger.info("Loading IAM dataset structural indexes from %s", iam_path)
     words = load_words(iam_path)
     if not words:
         raise RuntimeError("No words loaded — check iam_path.")
 
-    cache = preload_images(words, io_workers=io_workers)
-    if not cache:
-        raise RuntimeError("Image cache is empty — check word PNG paths.")
+    # Filter out broken or missing paths cleanly without allocating byte caches
+    logger.info("Validating dataset paths on file system...")
+    words = [w for w in words if os.path.exists(w[0])]
+
+    cache: dict[str, bytes] | None = None
+    if preload:
+        logger.info("Upfront global preloading enabled. Warning: High RAM Usage.")
+        cache = preload_images(words, io_workers=io_workers)
+        if not cache:
+            raise RuntimeError("Image cache built empty — check word paths.")
+    else:
+        logger.info("Using memory-bounded worker-local LRU caches (OOM Safe Mode).")
 
     logger.info(
         "Generating %d page pairs with %d CPU workers → %s",
@@ -379,6 +507,7 @@ def generate(
 
     ruled_str = str(ruled_dir)
     clean_str = str(clean_dir)
+    labels_str = str(labels_dir) if labels_dir else None
 
     with ProcessPoolExecutor(
         max_workers=cpu_workers,
@@ -386,7 +515,17 @@ def generate(
         initargs=(words, cache),
     ) as pool:
         futures = [
-            pool.submit(_render_task, i, seed, use_arc, ruled_str, clean_str)
+            pool.submit(
+                _render_task,
+                i,
+                seed,
+                use_arc,
+                max_warp,
+                imperfect_lines,
+                ruled_str,
+                clean_str,
+                labels_str,
+            )
             for i in range(n)
         ]
         for fut in tqdm(
@@ -397,18 +536,39 @@ def generate(
         ):
             fut.result()
 
-    logger.info("Done. %d ruled + %d clean pages written.", n, n)
+    logger.info("Done. Execution completed successfully.")
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
-        description="Generate synthetic ruled/clean page pairs."
+        description="Generate synthetic ruled/clean page pairs with optional warping and labeling features."
     )
     parser.add_argument(
         "--n", type=int, default=50, help="Number of page pairs to generate"
     )
     parser.add_argument(
+        "--preload",
+        action="store_true",
+        help="Preload entire image collection into RAM upfront (risks OOM crashes on small configurations)",
+    )
+    parser.add_argument(
         "--arc", action="store_true", help="Use slightly arced ruled lines"
+    )
+    parser.add_argument(
+        "--max-warp",
+        type=float,
+        default=0.05,
+        help="Maximum perspective warp factor for word crops (0.0 to disable)",
+    )
+    parser.add_argument(
+        "--imperfect-lines",
+        action="store_true",
+        help="Inject tiny structural imperfections and gaps into rules",
+    )
+    parser.add_argument(
+        "--save-json",
+        action="store_true",
+        help="Export ground-truth word layout coordinates as JSON files",
     )
     parser.add_argument(
         "--seed", type=int, default=None, help="RNG seed for reproducibility"
@@ -429,13 +589,17 @@ if __name__ == "__main__":
         "--io-workers",
         type=int,
         default=16,
-        help="I/O threads for image preloading (default: 16)",
+        help="I/O threads for upfront preloading step (default: 16)",
     )
     args = parser.parse_args()
 
     generate(
         n=args.n,
+        preload=args.preload,
         use_arc=args.arc,
+        max_warp=args.max_warp,
+        imperfect_lines=args.imperfect_lines,
+        save_json=args.save_json,
         seed=args.seed,
         iam_path=args.iam,
         target=args.out,

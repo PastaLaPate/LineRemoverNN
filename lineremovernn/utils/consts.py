@@ -6,7 +6,7 @@ from pathlib import Path
 import distro
 from torch.cuda import is_available as torch_cuda_available
 
-ROOT = Path(__file__).parent.parent # equal lineremovernn package dir
+ROOT = Path(__file__).parent.parent  # equal lineremovernn package dir
 SAVED = ROOT.parent / "saved"
 
 DEFAULT_DOWNLOADS = SAVED / "downloads"

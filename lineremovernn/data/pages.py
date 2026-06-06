@@ -1,7 +1,10 @@
-from torch import Tensor
-from torchvision.io import decode_image, ImageReadMode
 import os
 from typing import Tuple
+
+from torch import Tensor
+from torchvision import tv_tensors
+from torchvision.io import ImageReadMode, decode_image
+
 from lineremovernn.data.dataset import TorchDataset
 
 
@@ -31,6 +34,8 @@ class PagesDataset(TorchDataset):
         clean_img_path = self.clean_path / f"{idx}.jpg"
         ruled = decode_image(str(ruled_img_path), ImageReadMode.GRAY)
         clean = decode_image(str(clean_img_path), ImageReadMode.GRAY)
+        ruled = tv_tensors.Image(ruled)
+        clean = tv_tensors.Image(clean)
 
         if self.transform:
             ruled, clean = self.transform(ruled, clean)

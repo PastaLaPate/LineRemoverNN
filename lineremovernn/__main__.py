@@ -1,6 +1,5 @@
 import argparse
 
-from torch.backends import cudnn
 from torch.cuda import is_available as torch_cuda_available
 
 import lineremovernn.utils.logging as logging
@@ -8,7 +7,6 @@ from lineremovernn import commands
 from lineremovernn.utils.consts import ARCH, OS, PYTHON_VERSION, VERSION
 
 logger = logging.get_logger("Main")
-cudnn.benchmark = True
 
 
 def main():

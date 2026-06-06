@@ -217,8 +217,8 @@ def _draw_lines_layer(
     sub = rng.randint(3, 6)
 
     for x_v in range(0, W, params.line_spacing):
-        v_darkness = rng.randint(100, 180)  # Faint vertical lines
-        draw.line([(x_v, 0), (x_v, H)], fill=v_darkness, width=1)
+        v_darkness = rng.randint(100, 180)
+        draw.line([(x_v, 0), (x_v, H)], fill=v_darkness, width=rng.randint(1, 2))
 
     for i in range(n_lines + 1):
         y_group = params.margin_top + i * params.line_spacing

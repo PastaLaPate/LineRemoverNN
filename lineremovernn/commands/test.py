@@ -73,10 +73,38 @@ class TestCommand(Command):
         model.eval()
 
         transforms = v2.Compose(
-            [
-                v2.RandomCrop((512, 512)),
-                v2.ToDtype(torch.float32, scale=True),
-            ]
+            (
+                [
+                    # STEP 1: Fast crop to a slightly larger intermediate size.
+                    # Slashes canvas from 1.5M pixels down to ~147k pixels.
+                    v2.RandomCrop(
+                        (384, 384),
+                        pad_if_needed=True,
+                        fill=0,
+                        padding_mode="constant",
+                    ),
+                    # STEP 2: Run heavy geometric warps on the tiny canvas.
+                    # (Also fixed fill=255 to fill=0 to keep your black padding consistent!)
+                    v2.RandomPerspective(distortion_scale=0.15, p=0.5, fill=0),
+                    v2.RandomAffine(
+                        degrees=(-1.5, 1.5),
+                        scale=(
+                            0.75,
+                            1.3,
+                        ),  # 384 * 0.75 = 288 (still safely larger than 256)
+                        shear=(-4, 4),
+                        fill=0,
+                    ),
+                    # STEP 3: Final cut to your model's exact input size.
+                    v2.RandomCrop(
+                        (256, 256),
+                        pad_if_needed=True,
+                        fill=0,
+                        padding_mode="constant",
+                    ),
+                    v2.ToDtype(torch.float32, scale=True),
+                ]
+            )
         )
 
         dataset = PagesDataset(transforms)

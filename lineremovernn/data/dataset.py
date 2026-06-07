@@ -1,8 +1,11 @@
 import logging
 from abc import ABC, abstractmethod
+from functools import lru_cache
+from io import BytesIO
 from pathlib import Path
-from typing import Any
+from typing import Any, NamedTuple
 
+from PIL import Image
 from torch.utils.data import Dataset as TorchADataset
 
 from lineremovernn.utils.consts import DEFAULT_DATASETS, DEFAULT_DOWNLOADS
@@ -16,11 +19,20 @@ Dataset -> Standard class, name, path, etc.
 logger = logging.getLogger("Dataset")
 
 
+class CropAsset(NamedTuple):
+    path: str
+    text: str
+    raw_bytes: bytes | None = None
+
+
 class Dataset(ABC):
     ID = "DUMMY"
 
     def __init__(self):
         pass
+
+    def available(self) -> bool:
+        return self.path().exists()
 
     @abstractmethod
     def __len__(self) -> int:
@@ -33,6 +45,60 @@ class Dataset(ABC):
     @classmethod
     def path(cls) -> Path:
         return DEFAULT_DATASETS / cls.ID
+
+
+class CachedDataset(Dataset):
+    def __init__(self, preload: bool = False):
+        self.preload_enabled = preload
+        self.assets: list[CropAsset] = []
+        self._static_cache: dict[str, bytes] = {}
+
+        self._bounded_load = lru_cache(maxsize=3000)(self._read_raw_bytes)
+
+    def _read_raw_bytes(self, path: str) -> bytes | None:
+        try:
+            with open(path, "rb") as f:
+                return f.read()
+        except Exception:
+            return None
+
+    @abstractmethod
+    def load(self):
+        """Loads the dataset metadata (e.g., file paths, labels) into memory, but not the raw bytes. Populates self.assets."""
+        pass
+
+    def preload(self) -> None:
+        """Preloads all unique images directly into this instance's static cache storage."""
+        unique_paths = list({asset.path for asset in self.assets})
+        loaded = 0
+        for p in unique_paths:
+            data = self._read_raw_bytes(p)
+            if data is not None:
+                self._static_cache[p] = data
+                loaded += 1
+        logging.getLogger("Dataset").info(
+            f"[{self.ID}] Preloaded {loaded} assets into instance cache."
+        )
+
+    def __getitem__(self, idx: int) -> CropAsset:
+        meta = self.assets[idx]
+
+        if self.preload_enabled:
+            # Look up instantly from our preloaded dictionary
+            raw = self._static_cache.get(meta.path)
+        else:
+            # Read through our worker-local instance LRU cache layer
+            raw = self._bounded_load(meta.path)
+
+        return CropAsset(path=meta.path, text=meta.text, raw_bytes=raw)
+
+
+class ImageDataset(CachedDataset):
+    def get_image(self, idx: int) -> Image.Image:
+        asset = super().__getitem__(idx)
+        if asset.raw_bytes is None:
+            raise FileNotFoundError(f"Could not read image bytes from {asset.path}")
+        return Image.open(BytesIO(asset.raw_bytes)).convert("RGBA")
 
 
 class DownloadableDataset(Dataset):

@@ -6,20 +6,24 @@ from zipfile import ZipFile
 
 import tqdm
 
-from lineremovernn.data.dataset import DownloadableDataset
+from lineremovernn.data.dataset import DownloadableDataset, ImageDataset
 from lineremovernn.utils import logging
 
 logger = logging.get_logger("IAM")
 
 
-class IAMDataset(DownloadableDataset):
+class IAMDataset(DownloadableDataset, ImageDataset):
     ID = "IAM"
 
     def __init__(self):
         super().__init__()
+        self.len = 0  # Placeholder, as we don't have a specific length until we load the dataset.
 
     def __len__(self):
-        return 0
+        return self.len
+
+    def load(self):
+        return super().load()
 
     def __getitem__(self, idx):
         return None

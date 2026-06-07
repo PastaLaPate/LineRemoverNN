@@ -1,4 +1,4 @@
 from lineremovernn.data.iam import IAMDataset
-from lineremovernn.data.raw_mathwriting import RawMathWriting
+from lineremovernn.data.mathwriting import MathWritingDataset
 
-downloadable_datasets = {"iam": IAMDataset(), "mathwriting": RawMathWriting()}
+downloadable_datasets = {"iam": IAMDataset(), "mathwriting": MathWritingDataset()}

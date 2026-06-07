@@ -63,7 +63,7 @@ class CachedDataset(Dataset):
             return None
 
     @abstractmethod
-    def load(self):
+    def _load_metadata(self):
         """Loads the dataset metadata (e.g., file paths, labels) into memory, but not the raw bytes. Populates self.assets."""
         pass
 
@@ -79,6 +79,9 @@ class CachedDataset(Dataset):
         logging.getLogger("Dataset").info(
             f"[{self.ID}] Preloaded {loaded} assets into instance cache."
         )
+
+    def __len__(self) -> int:
+        return len(self.assets)
 
     def __getitem__(self, idx: int) -> CropAsset:
         meta = self.assets[idx]

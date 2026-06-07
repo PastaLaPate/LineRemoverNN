@@ -1,25 +1,14 @@
 """
-generate_pages.py — Synthetic ruled/clean page generator from IAM word crops.
-
-Usage:
-    python generate_pages.py [--n 50] [--preload] [--arc] [--max-warp 0.05] [--imperfect-lines] [--save-json] [--seed 42] [--workers 4]
-
-Outputs:
-    <target>/ruled-pages/0.jpg, 1.jpg, ..., n.jpg
-    <target>/clean-pages/0.jpg,  1.jpg, ..., n.jpg
-    <target>/labels/0.json, 1.json, ..., n.json (Optional)
+generate_pages.py — Synthetic ruled/clean page generator from proportional mixed datasets.
 """
 
 from __future__ import annotations
 
-import argparse
-import io
 import json
 import math
 import os
 import random
-from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_completed
-from functools import lru_cache
+from concurrent.futures import ProcessPoolExecutor, as_completed
 from pathlib import Path
 from typing import NamedTuple
 
@@ -29,87 +18,38 @@ from PIL import Image, ImageDraw
 from PIL.Image import Resampling
 from tqdm import tqdm
 
+from lineremovernn.data.dataset import ImageDataset
 from lineremovernn.data.iam import IAMDataset
 from lineremovernn.data.pages import PagesDataset
 from lineremovernn.utils import logging
 
 logger = logging.get_logger("PageGenerator")
 
-
 # ---------------------------------------------------------------------------
-# Data loading & Dual-Caching Strategy
+# Global Worker Context Layers
 # ---------------------------------------------------------------------------
 
-WordEntry = tuple[str, tuple[int, int, int, int], str, int]
+_WORKER_DATASETS: dict[str, ImageDataset] = {}
+_WORKER_TOKENS: list[tuple[str, int]] = []
 
 
-def load_words(iam_path: Path) -> list[WordEntry]:
-    words: list[WordEntry] = []
-    words_file = iam_path / "words.txt"
-    with open(words_file, encoding="UTF-8") as f:
-        for line in f:
-            line = line.rstrip()
-            if line.startswith("#") or len(line.split(" ")) != 9:
-                continue
-            filename, segmentation, gray, x, y, w, h, typ, transcript = line.split(" ")
-            if segmentation == "err":
-                continue
-            parts = filename.split("-")
-            path = (
-                iam_path / "words" / parts[0] / "-".join(parts[:2]) / f"{filename}.png"
-            )
-            words.append(
-                (str(path), (int(x), int(y), int(w), int(h)), transcript, int(gray))
-            )
-    return words
+def _worker_init(
+    dataset_blueprints: dict[str, type[ImageDataset]],
+    preload: bool,
+    mixed_tokens: list[tuple[str, int]],
+) -> None:
+    """Instantiates completely independent dataset caches locally inside every spawned worker process."""
+    global _WORKER_DATASETS, _WORKER_TOKENS
+    _WORKER_TOKENS = mixed_tokens
 
-
-def _read_one(path: str) -> tuple[str, bytes | None]:
-    """Used strictly during global preloading step."""
-    try:
-        with open(path, "rb") as f:
-            return path, f.read()
-    except Exception:
-        return path, None
-
-
-@lru_cache(maxsize=3000)
-def _worker_load_image_bytes(path: str) -> bytes | None:
-    """Bounded cache used within individual workers when upfront preloading is disabled."""
-    try:
-        with open(path, "rb") as f:
-            return f.read()
-    except Exception:
-        return None
-
-
-def preload_images(words: list[WordEntry], io_workers: int = 16) -> dict[str, bytes]:
-    """Preloads the entire dataset into a single dictionary using multi-threading."""
-    paths = list({w[0] for w in words})
-    cache: dict[str, bytes] = {}
-
-    with ThreadPoolExecutor(max_workers=io_workers) as pool:
-        futures = {pool.submit(_read_one, p): p for p in paths}
-        for fut in tqdm(
-            as_completed(futures),
-            total=len(futures),
-            desc="Preloading images",
-            unit="img",
-        ):
-            p, data = fut.result()
-            if data is not None:
-                cache[p] = data
-
-    logger.info(
-        "Preloaded %d images (%.1f MB)",
-        len(cache),
-        sum(len(v) for v in cache.values()) / 1e6,
-    )
-    return cache
+    # Intentionally initialize inside the worker process context boundary to keep LRU/Dict caches OOM safe
+    _WORKER_DATASETS = {
+        name: cls(preload=preload) for name, cls in dataset_blueprints.items()
+    }
 
 
 # ---------------------------------------------------------------------------
-# Page layout parameters
+# Layout Parameter Models & Helpers
 # ---------------------------------------------------------------------------
 
 
@@ -148,11 +88,6 @@ def arc_y_offset(x: int, page_width: int, amplitude: float) -> float:
     return amplitude * math.sin(t * math.pi)
 
 
-# ---------------------------------------------------------------------------
-# Image Augmentations
-# ---------------------------------------------------------------------------
-
-
 def add_random_perspective(
     img: Image.Image, max_warp: float, rng: random.Random
 ) -> Image.Image:
@@ -163,9 +98,7 @@ def add_random_perspective(
     src_points = np.array(
         [[0, 0], [width, 0], [width, height], [0, height]], dtype=np.float32
     )
-
-    max_dx = width * max_warp
-    max_dy = height * max_warp
+    max_dx, max_dy = width * max_warp, height * max_warp
 
     dst_points = np.array(
         [
@@ -181,7 +114,6 @@ def add_random_perspective(
     )
 
     matrix = cv2.getPerspectiveTransform(src_points, dst_points)
-
     corners = np.array(
         [[0, 0, 1], [width, 0, 1], [width, height, 1], [0, height, 1]], dtype=np.float32
     ).T
@@ -197,95 +129,46 @@ def add_random_perspective(
     )
     final_matrix = translation @ matrix
 
-    img_np = np.array(img)
     transformed = cv2.warpPerspective(
-        img_np,
+        np.array(img),
         final_matrix,
         (new_width, new_height),
         borderMode=cv2.BORDER_CONSTANT,
         borderValue=(0, 0, 0, 0),
     )
-
     return Image.fromarray(transformed)
-
-
-# ---------------------------------------------------------------------------
-# Process-pool worker initializer
-# ---------------------------------------------------------------------------
-
-_worker_cache: dict[str, bytes] | None = None
-_worker_words: list[WordEntry] = []
-
-
-def _worker_init(words: list[WordEntry], cache: dict[str, bytes] | None) -> None:
-    global _worker_cache, _worker_words
-    _worker_words = words
-    _worker_cache = cache
-
-
-def _render_task(
-    page_index: int,
-    seed: int | None,
-    use_arc: bool,
-    max_warp: float,
-    imperfect_lines: bool,
-    ruled_dir: str,
-    clean_dir: str,
-    labels_dir: str | None,
-) -> int:
-    rng = random.Random(None if seed is None else seed + page_index)
-    ruled_img, clean_img, labels = render_page(
-        _worker_words,
-        _worker_cache,
-        rng,
-        use_arc=use_arc,
-        max_warp=max_warp,
-        imperfect_lines=imperfect_lines,
-    )
-    ruled_img.save(f"{ruled_dir}/{page_index}.jpg", quality=92)
-    clean_img.save(f"{clean_dir}/{page_index}.jpg", quality=92)
-
-    if labels_dir and labels:
-        with open(f"{labels_dir}/{page_index}.json", "w", encoding="UTF-8") as f:
-            json.dump(labels, f, indent=2)
-
-    return page_index
-
-
-# ---------------------------------------------------------------------------
-# Core page renderer
-# ---------------------------------------------------------------------------
-
-
-def _open_word_image(raw: bytes) -> Image.Image | None:
-    try:
-        img = Image.open(io.BytesIO(raw)).convert("RGBA")
-
-        orig_w, orig_h = img.size
-        if orig_w > 4 and orig_h > 4:
-            img = img.crop((2, 2, orig_w - 2, orig_h - 2))
-
-        data = np.array(img)
-        brightness = data[..., :3].mean(axis=2)
-
-        bg_mask = brightness > 160
-
-        data[bg_mask] = [255, 255, 255, 0]
-        data[~bg_mask, 3] = 255
-
-        return Image.fromarray(data, "RGBA")
-    except Exception:
-        return None
 
 
 def _make_ink_word(img: Image.Image, target_h: int) -> Image.Image | None:
     orig_w, orig_h = img.size
-    if orig_h == 0:
+    if orig_h == 0 or orig_w == 0:
         return None
-    scale = target_h / orig_h
+
+    aspect_ratio = orig_w / orig_h
+
+    # 1. Establish a realistic maximum height for complex vertical math.
+    # A multi-tier fraction can occupy up to ~1.8x the height of a normal word
+    # before it starts looking unnaturally large.
+    if aspect_ratio < 1.2:  # Tall or square assets (fractions, integrals, matrices)
+        max_allowable_h = int(target_h * 1.8)
+    else:  # Short and wide assets (standard inline variables/equations)
+        max_allowable_h = target_h
+
+    # 2. Calculate the scaling factor based on this capped height target
+    if orig_h > max_allowable_h:
+        scale = max_allowable_h / orig_h
+    else:
+        scale = target_h / orig_h  # Don't upscale tiny assets unnecessarily
+
     new_w = max(1, int(orig_w * scale))
-    new_h = target_h
+    new_h = max(1, int(orig_h * scale))
+
     return img.resize((new_w, new_h), Resampling.BILINEAR)
+
+
+# ---------------------------------------------------------------------------
+# Background Lines Drawing Execution
+# ---------------------------------------------------------------------------
 
 
 def _draw_lines_layer(
@@ -298,13 +181,13 @@ def _draw_lines_layer(
 ) -> Image.Image:
     layer = Image.new("L", (W, H), 255)
     draw = ImageDraw.Draw(layer)
-
     n_lines = (H - params.margin_top) // params.line_spacing
     sub = rng.randint(3, 6)
 
     for x_v in range(0, W, params.line_spacing):
-        v_darkness = rng.randint(100, 180)
-        draw.line([(x_v, 0), (x_v, H)], fill=v_darkness, width=rng.randint(1, 2))
+        draw.line(
+            [(x_v, 0), (x_v, H)], fill=rng.randint(100, 180), width=rng.randint(1, 2)
+        )
 
     for i in range(n_lines + 1):
         y_group = params.margin_top + i * params.line_spacing
@@ -320,15 +203,18 @@ def _draw_lines_layer(
             if use_arc:
                 amplitude = rng.uniform(-15.0, 15.0)
                 step = max(1, W // 120)
-                pts = []
-                for x in range(0, W, step):
-                    y = y_base + y_off + arc_y_offset(x, W, amplitude)
-                    pts.append((x, int(y)))
+                pts = [
+                    (x, int(y_base + y_off + arc_y_offset(x, W, amplitude)))
+                    for x in range(0, W, step)
+                ]
                 if len(pts) >= 2:
                     draw.line(pts, fill=darkness, width=lw)
             else:
-                y_int = int(y_base) + y_off
-                draw.line([(0, y_int), (W, y_int)], fill=darkness, width=lw)
+                draw.line(
+                    [(0, int(y_base) + y_off), (W, int(y_base) + y_off)],
+                    fill=darkness,
+                    width=lw,
+                )
 
     draw.line(
         [(params.margin_left, 0), (params.margin_left, H)],
@@ -338,21 +224,50 @@ def _draw_lines_layer(
 
     if imperfect_lines:
         for _ in range(rng.randint(40, 120)):
-            hx = rng.randint(0, W)
-            hy = rng.randint(0, H)
-            hr = rng.randint(1, 4)
+            hx, hy, hr = rng.randint(0, W), rng.randint(0, H), rng.randint(1, 4)
             draw.ellipse([hx - hr, hy - hr, hx + hr, hy + hr], fill=255)
-
     return layer
 
 
+# ---------------------------------------------------------------------------
+# Core Rendering Task Thread Callables
+# ---------------------------------------------------------------------------
+
+
+def _render_task(
+    page_index: int,
+    seed: int | None,
+    use_arc: bool,
+    max_warp: float,
+    imperfect_lines: bool,
+    ruled_dir: str,
+    clean_dir: str,
+    labels_dir: str | None,
+) -> int:
+    rng = random.Random(None if seed is None else seed + page_index)
+
+    ruled_img, clean_img, labels = render_page(
+        rng,
+        use_arc=use_arc,
+        max_warp=max_warp,
+        imperfect_lines=imperfect_lines,
+        page_index=page_index,
+    )
+    ruled_img.save(f"{ruled_dir}/{page_index}.jpg", quality=92)
+    clean_img.save(f"{clean_dir}/{page_index}.jpg", quality=92)
+
+    if labels_dir and labels:
+        with open(f"{labels_dir}/{page_index}.json", "w", encoding="UTF-8") as f:
+            json.dump(labels, f, indent=2)
+    return page_index
+
+
 def render_page(
-    words: list[WordEntry],
-    cache: dict[str, bytes] | None,
     rng: random.Random,
     use_arc: bool = True,
     max_warp: float = 0.0,
     imperfect_lines: bool = False,
+    page_index: int = 0,
 ) -> tuple[Image.Image, Image.Image, list[dict]]:
     params = random_page_params(rng)
     W, H = params.width, params.height
@@ -360,38 +275,37 @@ def render_page(
 
     page_np = np.full((H, W), _PAPER_GRAY, dtype=np.uint8)
 
-    start_offset = rng.randint(0, max(0, len(words) - 1)) if words else 0
-    word_idx = 0
+    # Unique entry offset for text compilation per page
+    token_cursor = rng.randint(0, max(1, len(_WORKER_TOKENS) - 1))
     word_height = int(params.line_spacing * rng.uniform(0.58, 0.72))
-
     placed_words = []
 
     for line_i in range(n_lines):
         if line_i in params.skipped:
             continue
 
-        y_base = params.margin_top + line_i * params.line_spacing
-        y_top = y_base - word_height - rng.randint(2, 6)
+        y_top = (
+            (params.margin_top + line_i * params.line_spacing)
+            - word_height
+            - rng.randint(2, 6)
+        )
         if y_top < 0:
             continue
 
         x_cursor = params.margin_left + rng.randint(0, 12)
 
-        while x_cursor < W - 20 and word_idx < len(words):
-            entry = words[(start_offset + word_idx) % len(words)]
-            word_idx += 1
+        while x_cursor < W - 20:
+            # Safely step through mixed token identifiers
+            dset_id, asset_idx = _WORKER_TOKENS[token_cursor % len(_WORKER_TOKENS)]
+            token_cursor += 1
 
-            # Determine whether to read from global dictionary cache or local on-demand cache
-            if cache is not None:
-                raw = cache.get(entry[0])
-            else:
-                raw = _worker_load_image_bytes(entry[0])
+            target_dataset = _WORKER_DATASETS[dset_id]
 
-            if raw is None:
-                continue
-
-            word_img = _open_word_image(raw)
-            if word_img is None:
+            # Grabs properties cleanly. Custom pre-processing happens internally inside the dataset subclass!
+            try:
+                word_img = target_dataset.get_image(asset_idx)
+                asset_meta = target_dataset.assets[asset_idx]
+            except Exception:
                 continue
 
             if max_warp > 0.0:
@@ -405,29 +319,30 @@ def render_page(
             if x_cursor + ww > W - rng.randint(5, 30):
                 break
 
-            y_jitter = rng.randint(-3, 3)
-            paste_y = y_top + y_jitter
+            # 1. Calculate target coordinates on the main canvas
+            py0, py1 = max(y_top, 0), min(y_top + wh, H)
+            px0, px1 = max(x_cursor, 0), min(x_cursor + ww, W)
 
-            word_np = np.array(word_img)
-            alpha = word_np[..., 3]
-            gray = word_np[..., :3].mean(axis=2).astype(np.uint8)
-
-            py0 = max(paste_y, 0)
-            py1 = min(paste_y + wh, H)
-            px0 = max(x_cursor, 0)
-            px1 = min(x_cursor + ww, W)
-            wy0 = py0 - paste_y
-            wy1 = wy0 + (py1 - py0)
-            wx0 = px0 - x_cursor
-            wx1 = wx0 + (px1 - px0)
-
+            # 2. Only proceed if there is a valid overlapping region
             if py1 > py0 and px1 > px0:
-                mask = alpha[wy0:wy1, wx0:wx1] > 0
-                page_np[py0:py1, px0:px1][mask] = gray[wy0:wy1, wx0:wx1][mask]
+                word_np = np.array(word_img)
+
+                # 3. Calculate exact corresponding slices relative to the local word crop
+                wy0 = py0 - y_top
+                wy1 = wy0 + (py1 - py0)
+                wx0 = px0 - x_cursor
+                wx1 = wx0 + (px1 - px0)
+
+                # 4. Extract localized slices using the mapped variables
+                mask = word_np[wy0:wy1, wx0:wx1, 3] > 0
+                gray = word_np[wy0:wy1, wx0:wx1, :3].mean(axis=2).astype(np.uint8)
+
+                # 5. Perfect 1:1 shape alignment guaranteed
+                page_np[py0:py1, px0:px1][mask] = gray[mask]
 
                 placed_words.append(
                     {
-                        "text": entry[2],
+                        "text": asset_meta.text,
                         "x": int(px0),
                         "y": int(py0),
                         "w": int(px1 - px0),
@@ -438,18 +353,17 @@ def render_page(
             x_cursor += ww + params.word_gap + rng.randint(-2, 4)
 
     lines_layer = _draw_lines_layer(rng, W, H, params, use_arc, imperfect_lines)
-    lines_np = np.array(lines_layer)
+    ruled_np = np.minimum(page_np, np.array(lines_layer))
 
-    ruled_np = np.minimum(page_np, lines_np)
-
-    clean_img = Image.fromarray(page_np).convert("RGB")
-    ruled_img = Image.fromarray(ruled_np).convert("RGB")
-
-    return ruled_img, clean_img, placed_words
+    return (
+        Image.fromarray(ruled_np).convert("RGB"),
+        Image.fromarray(page_np).convert("RGB"),
+        placed_words,
+    )
 
 
 # ---------------------------------------------------------------------------
-# Main orchestrating entry point
+# Standard Orchestration Routine
 # ---------------------------------------------------------------------------
 
 
@@ -461,58 +375,60 @@ def generate(
     imperfect_lines: bool = False,
     save_json: bool = False,
     seed: int | None = None,
-    iam_path: Path | None = None,
     target: Path | None = None,
     workers: int | None = None,
-    io_workers: int = 16,
+    datasets: dict[float, type[ImageDataset]] | None = None,
 ) -> None:
     cpu_workers = workers or os.cpu_count() or 4
-
-    iam_path = iam_path or IAMDataset.path()
     target = target or PagesDataset.path()
 
-    ruled_dir = target / "ruled-pages"
-    clean_dir = target / "clean-pages"
+    ruled_dir, clean_dir = target / "ruled-pages", target / "clean-pages"
     ruled_dir.mkdir(parents=True, exist_ok=True)
     clean_dir.mkdir(parents=True, exist_ok=True)
-
     labels_dir = target / "labels" if save_json else None
     if labels_dir:
         labels_dir.mkdir(parents=True, exist_ok=True)
 
-    logger.info("Loading IAM dataset structural indexes from %s", iam_path)
-    words = load_words(iam_path)
-    if not words:
-        raise RuntimeError("No words loaded — check iam_path.")
+    # Use defaults if no explicit configuration properties are supplied
+    if not datasets:
+        datasets = {1: IAMDataset}
 
-    # Filter out broken or missing paths cleanly without allocating byte caches
-    logger.info("Validating dataset paths on file system...")
-    words = [w for w in words if os.path.exists(w[0])]
+    # Normalize properties and index counts via temporary local instances
+    total_weight = sum(datasets.keys())
+    normalized_sets = {
+        f"ds_{i}": (cls, w / total_weight)
+        for i, (w, cls) in enumerate(datasets.items())
+    }
 
-    cache: dict[str, bytes] | None = None
-    if preload:
-        logger.info("Upfront global preloading enabled. Warning: High RAM Usage.")
-        cache = preload_images(words, io_workers=io_workers)
-        if not cache:
-            raise RuntimeError("Image cache built empty — check word paths.")
-    else:
-        logger.info("Using memory-bounded worker-local LRU caches (OOM Safe Mode).")
+    logger.info("Assembling multi-dataset token layouts...")
+    mixed_tokens: list[tuple[str, int]] = []
+    dataset_blueprints: dict[str, type[ImageDataset]] = {}
 
+    # Calculate target map pools (allocated at a large scale multiplier to handle distribution coverage)
+    token_pool_target = max(100000, n * 40)
+
+    for dset_key, (cls, weight) in normalized_sets.items():
+        dataset_blueprints[dset_key] = cls
+
+        # Instantiate a dry probe configuration simply to gather dataset length
+        probe = cls(preload=False)
+        dset_len = len(probe)
+        if dset_len == 0:
+            continue
+
+        allocated_count = int(token_pool_target * weight)
+        indices = random.choices(range(dset_len), k=allocated_count)
+        mixed_tokens.extend([(dset_key, idx) for idx in indices])
+
+    random.shuffle(mixed_tokens)
     logger.info(
-        "Generating %d page pairs with %d CPU workers → %s",
-        n,
-        cpu_workers,
-        target,
+        f"Assembled shared mixed tokens. Total token pool contains: {len(mixed_tokens)} slots."
     )
-
-    ruled_str = str(ruled_dir)
-    clean_str = str(clean_dir)
-    labels_str = str(labels_dir) if labels_dir else None
 
     with ProcessPoolExecutor(
         max_workers=cpu_workers,
         initializer=_worker_init,
-        initargs=(words, cache),
+        initargs=(dataset_blueprints, preload, mixed_tokens),
     ) as pool:
         futures = [
             pool.submit(
@@ -522,87 +438,20 @@ def generate(
                 use_arc,
                 max_warp,
                 imperfect_lines,
-                ruled_str,
-                clean_str,
-                labels_str,
+                str(ruled_dir),
+                str(clean_dir),
+                str(labels_dir) if labels_dir else None,
             )
             for i in range(n)
         ]
         for fut in tqdm(
-            as_completed(futures),
-            total=n,
-            desc="Generating pages",
-            unit="page",
+            as_completed(futures), total=n, desc="Generating mixed pages", unit="page"
         ):
             fut.result()
 
-    logger.info("Done. Execution completed successfully.")
+    logger.info("Done. Mixed generation pipeline completed successfully.")
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(
-        description="Generate synthetic ruled/clean page pairs with optional warping and labeling features."
-    )
-    parser.add_argument(
-        "--n", type=int, default=50, help="Number of page pairs to generate"
-    )
-    parser.add_argument(
-        "--preload",
-        action="store_true",
-        help="Preload entire image collection into RAM upfront (risks OOM crashes on small configurations)",
-    )
-    parser.add_argument(
-        "--arc", action="store_true", help="Use slightly arced ruled lines"
-    )
-    parser.add_argument(
-        "--max-warp",
-        type=float,
-        default=0.05,
-        help="Maximum perspective warp factor for word crops (0.0 to disable)",
-    )
-    parser.add_argument(
-        "--imperfect-lines",
-        action="store_true",
-        help="Inject tiny structural imperfections and gaps into rules",
-    )
-    parser.add_argument(
-        "--save-json",
-        action="store_true",
-        help="Export ground-truth word layout coordinates as JSON files",
-    )
-    parser.add_argument(
-        "--seed", type=int, default=None, help="RNG seed for reproducibility"
-    )
-    parser.add_argument(
-        "--iam", type=Path, default=None, help="Override IAM dataset path"
-    )
-    parser.add_argument(
-        "--out", type=Path, default=None, help="Override output target path"
-    )
-    parser.add_argument(
-        "--workers",
-        type=int,
-        default=None,
-        help="CPU worker processes (default: all cores)",
-    )
-    parser.add_argument(
-        "--io-workers",
-        type=int,
-        default=16,
-        help="I/O threads for upfront preloading step (default: 16)",
-    )
-    args = parser.parse_args()
-
-    generate(
-        n=args.n,
-        preload=args.preload,
-        use_arc=args.arc,
-        max_warp=args.max_warp,
-        imperfect_lines=args.imperfect_lines,
-        save_json=args.save_json,
-        seed=args.seed,
-        iam_path=args.iam,
-        target=args.out,
-        workers=args.workers,
-        io_workers=args.io_workers,
-    )
+    # Standard arg parser mapping to trigger standalone execution
+    generate(n=20)

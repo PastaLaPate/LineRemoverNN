@@ -3,6 +3,8 @@ from pathlib import Path
 
 from lineremovernn.commands.command import Command
 from lineremovernn.data.generation.pages_generator import generate
+from lineremovernn.data.iam import IAMDataset
+from lineremovernn.data.mathwriting import MathWritingDataset
 from lineremovernn.utils import logging
 
 logger = logging.get_logger("PageGenerator")
@@ -63,13 +65,6 @@ class GeneratePagesCommand(Command):
             default=None,
             help="CPU worker processes (default: all cores)",
         )
-        parser.add_argument(
-            "-iw",
-            "--io-workers",
-            type=int,
-            default=16,
-            help="I/O threads for image preloading (default: 16)",
-        )
 
     def execute(self, args: Namespace) -> None:
         generate(
@@ -79,9 +74,8 @@ class GeneratePagesCommand(Command):
             max_warp=args.max_warp,
             save_json=args.save_json,
             seed=args.seed,
-            iam_path=args.iam,
             target=args.out,
             workers=args.workers,
-            io_workers=args.io_workers,
             preload=args.preload,
+            datasets={0.51: IAMDataset, 0.49: MathWritingDataset},
         )

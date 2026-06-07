@@ -1,77 +1,141 @@
 import tarfile
 import tempfile
+from functools import lru_cache
 from pathlib import Path
 from urllib.request import urlopen
 from zipfile import ZipFile
 
+import numpy as np
 import tqdm
+from PIL import Image
 
-from lineremovernn.data.dataset import DownloadableDataset, ImageDataset
+from lineremovernn.data.dataset import CropAsset, DownloadableDataset, ImageDataset
 from lineremovernn.utils import logging
 
 logger = logging.get_logger("IAM")
+
+WordEntry = tuple[str, tuple[int, int, int, int], str, int]
 
 
 class IAMDataset(DownloadableDataset, ImageDataset):
     ID = "IAM"
 
-    def __init__(self):
-        super().__init__()
-        self.len = 0  # Placeholder, as we don't have a specific length until we load the dataset.
+    def __init__(self, preload: bool = False):
+        # Initialize parent classes explicitly if cooperative MRO is unstable
+        DownloadableDataset.__init__(self)
+        ImageDataset.__init__(self, preload=preload)
 
-    def __len__(self):
-        return self.len
+        # Automatically pull data into scope upon instantiation if files exist
+        if self.available():
+            self._load_metadata()
 
-    def load(self):
-        return super().load()
+    def _load_metadata(self) -> None:
+        """Parses words mapping data into structural CropAsset arrays."""
+        words_file = self.path() / "words.txt"
+        if not words_file.exists():
+            logger.warning(
+                f"Metadata index not found at {words_file}. Run install() first."
+            )
+            return
 
-    def __getitem__(self, idx):
-        return None
+        with open(words_file, encoding="UTF-8") as f:
+            for line in f:
+                line = line.rstrip()
+                if line.startswith("#") or len(line.split(" ")) != 9:
+                    continue
+                filename, segmentation, _, _, _, _, _, _, transcript = line.split(" ")
+                if segmentation == "err":
+                    continue
+
+                parts = filename.split("-")
+                img_path = (
+                    self.path()
+                    / "words"
+                    / parts[0]
+                    / "-".join(parts[:2])
+                    / f"{filename}.png"
+                )
+
+                # Exclusively utilize the standardized self.assets stream
+                self.assets.append(CropAsset(path=str(img_path), text=transcript))
+
+        if self.preload_enabled:
+            self.preload()
+
+    @lru_cache(maxsize=2000)
+    def get_image(self, idx: int) -> Image.Image:
+        """
+        Fetches the target crop asset.
+        Decorated with an LRU cache to prevent redundant runtime array manipulation loops.
+        """
+        # Call ImageDataset's core retrieval to extract raw underlying PIL state
+        img = ImageDataset.get_image(self, idx)
+
+        orig_w, orig_h = img.size
+        if orig_w > 4 and orig_h > 4:
+            img = img.crop((2, 2, orig_w - 2, orig_h - 2))
+
+        data = np.array(img)
+        brightness = data[..., :3].mean(axis=2)
+
+        # Vectorized alpha-mask transformation
+        bg_mask = brightness > 160
+        data[bg_mask] = [255, 255, 255, 0]
+        data[~bg_mask, 3] = 255
+
+        return Image.fromarray(data, "RGBA")
 
     @classmethod
     def download(cls, download_path: str, force: bool = False):
         dataset_path = Path(download_path) / "IAM_Words"
+        dataset_path.mkdir(parents=True, exist_ok=True)
 
-        if not (dataset_path / "words.tgz").exists() or force:
-            logger.info("Downloading IAM dataset...")
-            cls._download_and_unzip("https://git.io/J0fjL", dataset_path)
+        source_url = "https://github.com/sayakpaul/Handwriting-Recognizer-in-Keras/releases/download/v1.0.0/IAM_Words.zip"
+
+        archive_target = dataset_path / "words.tgz"
+        if not archive_target.exists() or force:
+            logger.info("Downloading IAM dataset repository...")
+            cls._download_and_unzip(source_url, dataset_path)
         else:
             raise FileExistsError(
-                f"Dataset already exists at {dataset_path}. Use force=True to re-download."
+                f"Dataset already exists at {dataset_path}. Use force=True to overwrite."
             )
 
     @classmethod
     def extract(cls, download_path: str, dataset_path: str, force: bool = False):
-        dl = Path(download_path) / "IAM_Words" / "IAM_Words"
-        logger.info("Extracting words.tgz...")
-        if not (Path(dataset_path) / "words").exists() or force:
-            with tarfile.open(dl / "words.tgz") as f:
-                f.extractall(Path(dataset_path) / "words")
+        target_root = Path(dataset_path)
+        dl_source_dir = Path(download_path) / "IAM_Words" / "IAM_Words"
+
+        words_tgz = dl_source_dir / "words.tgz"
+        words_txt = dl_source_dir / "words.txt"
+
+        logger.info("Extracting word snippets from words.tgz...")
+        words_out_dir = target_root / "words"
+        if not words_out_dir.exists() or force:
+            with tarfile.open(words_tgz) as f:
+                f.extractall(words_out_dir)
         else:
             raise FileExistsError(
-                f"Extracted dataset already exists at {Path(dataset_path) / 'words'}. Use force=True to re-extract."
+                f"Extracted directory already exists at {words_out_dir}."
             )
 
-        logger.info("Moving the words.txt file to the dataset root...")
-        if not (Path(dataset_path) / "words.txt").exists() or force:
-            (Path(dl) / "words.txt").rename(Path(dataset_path) / "words.txt")
+        logger.info("Staging words.txt context into root location...")
+        txt_out_target = target_root / "words.txt"
+        if not txt_out_target.exists() or force:
+            words_txt.rename(txt_out_target)
         else:
-            raise FileExistsError(
-                f"words.txt already exists at {Path(dataset_path) / 'words.txt'}. Use force=True to re-move."
-            )
+            raise FileExistsError(f"Metadata file already exists at {txt_out_target}.")
 
-        logger.info("Done.")
+        logger.info("Dataset staging completed successfully.")
 
     @classmethod
     def _download_and_unzip(
         cls, url: str, extract_to: Path, chunk_size: int = 1024 * 1024
     ) -> None:
-        # Ensure the target directory exists
         extract_to.mkdir(parents=True, exist_ok=True)
 
         with tempfile.NamedTemporaryFile(suffix=".zip", delete=True) as tmp_file:
-            logger.info("Connecting to server...")
-
+            logger.info("Establishing secure downstream connection...")
             with urlopen(url) as response:
                 total_size = int(response.headers.get("Content-Length", 0))
 
@@ -79,7 +143,7 @@ class IAMDataset(DownloadableDataset, ImageDataset):
                     total=total_size,
                     unit="B",
                     unit_scale=True,
-                    desc="Downloading",
+                    desc="Downloading Stream",
                     leave=True,
                 ) as pbar:
                     while True:
@@ -89,12 +153,9 @@ class IAMDataset(DownloadableDataset, ImageDataset):
                         tmp_file.write(chunk)
                         pbar.update(len(chunk))
 
-            # Force any buffered data to write to disk and reset file pointer to the beginning
             tmp_file.flush()
             tmp_file.seek(0)
 
-            logger.info(f"Extracting archive to {extract_to}...")
+            logger.info(f"Unpacking file manifest into {extract_to}...")
             with ZipFile(tmp_file) as zf:
                 zf.extractall(path=extract_to)
-
-        logger.info("Extraction complete and temporary files cleaned up.")

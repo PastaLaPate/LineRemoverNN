@@ -94,6 +94,7 @@ class CachedDataset(Dataset):
 
 
 class ImageDataset(CachedDataset):
+    @lru_cache(maxsize=2000)
     def get_image(self, idx: int) -> Image.Image:
         asset = super().__getitem__(idx)
         if asset.raw_bytes is None:

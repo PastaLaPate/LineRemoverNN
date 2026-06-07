@@ -1,6 +1,6 @@
-from io import BytesIO
-from pathlib import Path
 import tarfile
+import tempfile
+from pathlib import Path
 from urllib.request import urlopen
 from zipfile import ZipFile
 
@@ -8,7 +8,6 @@ import tqdm
 
 from lineremovernn.data.dataset import DownloadableDataset
 from lineremovernn.utils import logging
-
 
 logger = logging.get_logger("IAM")
 
@@ -63,11 +62,35 @@ class IAMDataset(DownloadableDataset):
     def _download_and_unzip(
         cls, url: str, extract_to: Path, chunk_size: int = 1024 * 1024
     ) -> None:
-        with urlopen(url) as response:
-            total = response.length // chunk_size + 1
-            data = b""
-            for _ in tqdm.tqdm(range(total), desc="Downloading", unit="chunk"):
-                data += response.read(chunk_size)
+        # Ensure the target directory exists
+        extract_to.mkdir(parents=True, exist_ok=True)
 
-        with ZipFile(BytesIO(data)) as zf:
-            zf.extractall(path=extract_to)
+        with tempfile.NamedTemporaryFile(suffix=".zip", delete=True) as tmp_file:
+            logger.info("Connecting to server...")
+
+            with urlopen(url) as response:
+                total_size = int(response.headers.get("Content-Length", 0))
+
+                with tqdm.tqdm(
+                    total=total_size,
+                    unit="B",
+                    unit_scale=True,
+                    desc="Downloading",
+                    leave=True,
+                ) as pbar:
+                    while True:
+                        chunk = response.read(chunk_size)
+                        if not chunk:
+                            break
+                        tmp_file.write(chunk)
+                        pbar.update(len(chunk))
+
+            # Force any buffered data to write to disk and reset file pointer to the beginning
+            tmp_file.flush()
+            tmp_file.seek(0)
+
+            logger.info(f"Extracting archive to {extract_to}...")
+            with ZipFile(tmp_file) as zf:
+                zf.extractall(path=extract_to)
+
+        logger.info("Extraction complete and temporary files cleaned up.")

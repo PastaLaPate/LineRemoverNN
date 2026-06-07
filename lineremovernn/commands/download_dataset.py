@@ -4,6 +4,7 @@ from pathlib import Path
 from lineremovernn.commands.command import Command
 from lineremovernn.data import downloadable_datasets
 from lineremovernn.data.iam import IAMDataset
+from lineremovernn.data.raw_mathwriting import RawMathWriting
 from lineremovernn.utils import logging
 
 logger = logging.get_logger("DatasetDownloader")
@@ -50,3 +51,11 @@ class DownloadDatasetCommand(Command):
         if args.dataset == "iam":
             dataset = IAMDataset()
             dataset.install(args.force_download, args.output_dir, args.output_dir)
+        elif args.dataset == "mathwriting":
+            dataset = RawMathWriting()
+            dataset.install(
+                args.force_download,
+                args.force_extract,
+                args.output_dir,
+                args.output_dir,
+            )

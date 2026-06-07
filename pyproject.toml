@@ -3,7 +3,7 @@ name = "lineremovernn"
 version = "0.0.1"
 description = "Add your description here"
 readme = "README.md"
-requires-python = ">=3.14"
+requires-python = ">=3.12"
 dependencies = [
     "colorama>=0.4.6",
     "distro>=1.9.0",
@@ -17,39 +17,49 @@ dependencies = [
     "torchinfo>=1.8.0",
     "torchvision==0.24.0",
     "tqdm>=4.67.3",
-    "ty>=0.0.43",
+    "ty>=0.0.44",
 ]
 
-
 [build-system]
-requires = ["pdm-backend >= 2.4.0"]
-build-backend = "pdm.backend"
+requires = [
+    "scikit-build-core>=0.10",
+    "nanobind>=2.0",
+    "opencv-python>=4.13.0.92"
+]
+build-backend = "scikit_build_core.build"
 
-[tool.setuptools]
-py-modules = []
+[tool.scikit-build]
+build-dir = "build/{wheel_tag}"
+cmake.build-type = "Release"
+wheel.packages = ["lineremovernn"]
+
+[tool.scikit-build.cmake.define]
+# Pass numpy/torch paths automatically via scikit-build
+SKBUILD = "ON"
 
 [tool.uv]
 default-groups = []
-
 [tool.uv.workspace]
 members = ["."]
-
 [[tool.uv.index]]
 name = "pytorch-cu130"
 url = "https://download.pytorch.org/whl/cu130"
 explicit = true
-
 [tool.uv.sources]
-lineremovernn = { workspace = true }
 torch = [
   { index = "pytorch-cu130", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
 ]
 torchvision = [
   { index = "pytorch-cu130", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
 ]
-
 [dependency-groups]
-dev = ["lineremovernn", "pre-commit>=4.5.1"]
+dev = [
+    "lineremovernn",
+    "pre-commit>=4.5.1",
+    "nanobind>=2.0",
+    "scikit-build-core>=0.12.2",
+    "cmake>=4.3.2",
+]
 
 [project.scripts]
 lineremovernn = "lineremovernn.__main__:main"

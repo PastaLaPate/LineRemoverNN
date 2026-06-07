@@ -2,9 +2,9 @@ from argparse import Namespace
 from pathlib import Path
 
 from lineremovernn.commands.command import Command
-from lineremovernn.data.generation.pages_generator import generate
 from lineremovernn.data.iam import IAMDataset
 from lineremovernn.data.mathwriting import MathWritingDataset
+from lineremovernn.data.pages_generator import generate
 from lineremovernn.utils import logging
 
 logger = logging.get_logger("PageGenerator")

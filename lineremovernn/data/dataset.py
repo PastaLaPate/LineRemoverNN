@@ -53,7 +53,7 @@ class CachedDataset(Dataset):
         self.assets: list[CropAsset] = []
         self._static_cache: dict[str, bytes] = {}
 
-        self._bounded_load = lru_cache(maxsize=3000)(self._read_raw_bytes)
+        self._bounded_load = lru_cache(maxsize=2000)(self._read_raw_bytes)
 
     def _read_raw_bytes(self, path: str) -> bytes | None:
         try:
@@ -97,12 +97,12 @@ class CachedDataset(Dataset):
 
 
 class ImageDataset(CachedDataset):
-    @lru_cache(maxsize=2000)
-    def get_image(self, idx: int) -> Image.Image:
+    # @lru_cache(maxsize=200)
+    def get_image(self, idx: int, mode="RGBA") -> Image.Image:
         asset = super().__getitem__(idx)
         if asset.raw_bytes is None:
             raise FileNotFoundError(f"Could not read image bytes from {asset.path}")
-        return Image.open(BytesIO(asset.raw_bytes)).convert("RGBA")
+        return Image.open(BytesIO(asset.raw_bytes)).convert(mode)
 
 
 class DownloadableDataset(Dataset):

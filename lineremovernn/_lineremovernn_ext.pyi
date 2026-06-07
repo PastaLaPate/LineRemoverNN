@@ -1,0 +1,6 @@
+import numpy as np
+
+def render_page_cairo(
+    width: int, height: int, line_density: float = 0.1
+) -> np.ndarray: ...
+def remove_lines_opencv(img: np.ndarray) -> None: ...

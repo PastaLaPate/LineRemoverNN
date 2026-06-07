@@ -1,20 +1,17 @@
-"""
-generate_pages.py — Synthetic ruled/clean page generator from proportional mixed datasets.
-"""
-
 from __future__ import annotations
 
 import json
-import math
 import os
 import random
-from concurrent.futures import ProcessPoolExecutor, as_completed
+import time
+import traceback
+from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
 from typing import NamedTuple
 
 import cv2
 import numpy as np
-from PIL import Image, ImageDraw
+from PIL import Image, ImageChops, ImageDraw
 from PIL.Image import Resampling
 from tqdm import tqdm
 
@@ -38,11 +35,8 @@ def _worker_init(
     preload: bool,
     mixed_tokens: list[tuple[str, int]],
 ) -> None:
-    """Instantiates completely independent dataset caches locally inside every spawned worker process."""
     global _WORKER_DATASETS, _WORKER_TOKENS
     _WORKER_TOKENS = mixed_tokens
-
-    # Intentionally initialize inside the worker process context boundary to keep LRU/Dict caches OOM safe
     _WORKER_DATASETS = {
         name: cls(preload=preload) for name, cls in dataset_blueprints.items()
     }
@@ -67,8 +61,8 @@ _PAPER_GRAY = 250
 
 
 def random_page_params(rng: random.Random) -> PageParams:
-    w = rng.randint(900, 2000)
-    h = rng.randint(1000, 2300)
+    w = 4000  # rng.randint(900, 2000)
+    h = 4000  # rng.randint(1000, 2300)
 
     margin_left = int(w * rng.uniform(0.10, 0.18))
     margin_top = int(h * rng.uniform(0.06, 0.12))
@@ -83,11 +77,6 @@ def random_page_params(rng: random.Random) -> PageParams:
     return PageParams(w, h, margin_left, margin_top, line_spacing, word_gap, skipped)
 
 
-def arc_y_offset(x: int, page_width: int, amplitude: float) -> float:
-    t = x / page_width
-    return amplitude * math.sin(t * math.pi)
-
-
 def add_random_perspective(
     img: Image.Image, max_warp: float, rng: random.Random
 ) -> Image.Image:
@@ -95,11 +84,16 @@ def add_random_perspective(
         return img
 
     width, height = img.size
+
+    # 1. Map original image boundaries
     src_points = np.array(
         [[0, 0], [width, 0], [width, height], [0, height]], dtype=np.float32
     )
-    max_dx, max_dy = width * max_warp, height * max_warp
 
+    max_dx = width * max_warp
+    max_dy = height * max_warp
+
+    # 2. Compute random warp points
     dst_points = np.array(
         [
             [rng.uniform(-max_dx, max_dx), rng.uniform(-max_dy, max_dy)],
@@ -114,28 +108,37 @@ def add_random_perspective(
     )
 
     matrix = cv2.getPerspectiveTransform(src_points, dst_points)
-    corners = np.array(
-        [[0, 0, 1], [width, 0, 1], [width, height, 1], [0, height, 1]], dtype=np.float32
-    ).T
-    new_corners = matrix @ corners
-    new_corners /= new_corners[2]
 
-    min_x, min_y = new_corners[:2].min(axis=1)
-    max_x, max_y = new_corners[:2].max(axis=1)
-    new_width, new_height = max(1, int(max_x - min_x)), max(1, int(max_y - min_y))
+    # OPTIMIZATION 1: dst_points ARE the projected corners.
+    # Extract bounding box limits instantly without matrix re-multiplication.
+    min_x = dst_points[:, 0].min()
+    max_x = dst_points[:, 0].max()
+    min_y = dst_points[:, 1].min()
+    max_y = dst_points[:, 1].max()
 
-    translation = np.array(
-        [[1, 0, -min_x], [0, 1, -min_y], [0, 0, 1]], dtype=np.float32
-    )
-    final_matrix = translation @ matrix
+    new_width = max(1, int(max_x - min_x))
+    new_height = max(1, int(max_y - min_y))
+
+    # OPTIMIZATION 2: Apply translation in-place via algebraic row operations.
+    # This completely avoids allocating a translation matrix and executing a matrix multiplication.
+    matrix[0, :] -= min_x * matrix[2, :]
+    matrix[1, :] -= min_y * matrix[2, :]
+
+    # OPTIMIZATION 3: Use np.asarray() for a zero-copy memory view of the PIL state
+    np_img = np.asarray(img)
+
+    # OPTIMIZATION 4: Match border scalar to image layout to keep OpenCV out of slow multi-channel paths
+    border_val = 0 if img.mode == "L" else (0, 0, 0, 0)
 
     transformed = cv2.warpPerspective(
-        np.array(img),
-        final_matrix,
+        np_img,
+        matrix,
         (new_width, new_height),
+        flags=cv2.INTER_LINEAR,  # Switch to cv2.INTER_NEAREST for raw, maximum speed
         borderMode=cv2.BORDER_CONSTANT,
-        borderValue=(0, 0, 0, 0),
+        borderValue=border_val,
     )
+
     return Image.fromarray(transformed)
 
 
@@ -145,20 +148,8 @@ def _make_ink_word(img: Image.Image, target_h: int) -> Image.Image | None:
         return None
 
     aspect_ratio = orig_w / orig_h
-
-    # 1. Establish a realistic maximum height for complex vertical math.
-    # A multi-tier fraction can occupy up to ~1.8x the height of a normal word
-    # before it starts looking unnaturally large.
-    if aspect_ratio < 1.2:  # Tall or square assets (fractions, integrals, matrices)
-        max_allowable_h = int(target_h * 1.8)
-    else:  # Short and wide assets (standard inline variables/equations)
-        max_allowable_h = target_h
-
-    # 2. Calculate the scaling factor based on this capped height target
-    if orig_h > max_allowable_h:
-        scale = max_allowable_h / orig_h
-    else:
-        scale = target_h / orig_h  # Don't upscale tiny assets unnecessarily
+    max_allowable_h = int(target_h * 1.8) if aspect_ratio < 1.2 else target_h
+    scale = max_allowable_h / orig_h if orig_h > max_allowable_h else target_h / orig_h
 
     new_w = max(1, int(orig_w * scale))
     new_h = max(1, int(orig_h * scale))
@@ -184,6 +175,15 @@ def _draw_lines_layer(
     n_lines = (H - params.margin_top) // params.line_spacing
     sub = rng.randint(3, 6)
 
+    # Pre-calculate vectorized x variables for arced lines once per page
+    if use_arc:
+        step = max(1, W // 120)
+        x_vals = np.arange(0, W, step)
+        t_vals = x_vals / W
+        pi_t_vals = t_vals * np.pi
+        pts_buffer = np.empty((len(x_vals) * 2,), dtype=np.int32)
+        pts_buffer[0::2] = x_vals
+
     for x_v in range(0, W, params.line_spacing):
         draw.line(
             [(x_v, 0), (x_v, H)], fill=rng.randint(100, 180), width=rng.randint(1, 2)
@@ -202,13 +202,13 @@ def _draw_lines_layer(
 
             if use_arc:
                 amplitude = rng.uniform(-15.0, 15.0)
-                step = max(1, W // 120)
-                pts = [
-                    (x, int(y_base + y_off + arc_y_offset(x, W, amplitude)))
-                    for x in range(0, W, step)
-                ]
-                if len(pts) >= 2:
-                    draw.line(pts, fill=darkness, width=lw)
+                # Vectorized calculations replace thousands of list comprehension loops
+                y_offsets = amplitude * np.sin(pi_t_vals)
+                y_vals = np.round(y_base + y_off + y_offsets).astype(np.int32)
+
+                pts_buffer[1::2] = y_vals
+                if len(pts_buffer) >= 4:
+                    draw.line(pts_buffer.tolist(), fill=darkness, width=lw)
             else:
                 draw.line(
                     [(0, int(y_base) + y_off), (W, int(y_base) + y_off)],
@@ -226,12 +226,133 @@ def _draw_lines_layer(
         for _ in range(rng.randint(40, 120)):
             hx, hy, hr = rng.randint(0, W), rng.randint(0, H), rng.randint(1, 4)
             draw.ellipse([hx - hr, hy - hr, hx + hr, hy + hr], fill=255)
+
     return layer
 
 
 # ---------------------------------------------------------------------------
 # Core Rendering Task Thread Callables
 # ---------------------------------------------------------------------------
+
+
+def render_page(
+    rng: random.Random,
+    use_arc: bool = True,
+    max_warp: float = 0.0,
+    imperfect_lines: bool = False,
+    page_index: int = 0,
+) -> tuple[Image.Image, Image.Image, list[dict]]:
+    params = random_page_params(rng)
+    W, H = params.width, params.height
+    n_lines = (H - params.margin_top) // params.line_spacing
+
+    # Use native Pillow operations instead of numpy arrays
+    page_img = Image.new("L", (W, H), _PAPER_GRAY)
+
+    token_cursor = rng.randint(0, max(1, len(_WORKER_TOKENS) - 1))
+    word_height = int(params.line_spacing * rng.uniform(0.58, 0.72))
+    placed_words = []
+    n_tokens = len(_WORKER_TOKENS)
+
+    sum_fetching = 0
+    sum_treating = 0
+    sum_pasting = 0
+    sum_json = 0
+    x = 0
+
+    for line_i in range(n_lines):
+        if line_i in params.skipped:
+            continue
+
+        y_top = (
+            (params.margin_top + line_i * params.line_spacing)
+            - word_height
+            - rng.randint(2, 6)
+        )
+        if y_top < 0:
+            continue
+
+        x_cursor = params.margin_left + rng.randint(0, 12)
+
+        while x_cursor < W - 20:
+            dset_id, asset_idx = _WORKER_TOKENS[token_cursor % n_tokens]
+            token_cursor += 1
+
+            t = time.time_ns()
+            try:
+                word_img = _WORKER_DATASETS[dset_id].get_image(asset_idx, mode="L")
+                asset_meta = _WORKER_DATASETS[dset_id].assets[asset_idx]
+            except Exception:
+                logger.error(traceback.format_exc())
+                continue
+            sum_fetching += time.time_ns() - t
+            t = time.time_ns()
+
+            if max_warp > 0.0:
+                word_img = add_random_perspective(word_img, max_warp, rng)
+
+            word_img = _make_ink_word(word_img, word_height)
+            if word_img is None:
+                continue
+
+            ww, wh = word_img.size
+            if x_cursor + ww > W - rng.randint(5, 30):
+                break
+
+            py0, py1 = max(y_top, 0), min(y_top + wh, H)
+            px0, px1 = max(x_cursor, 0), min(x_cursor + ww, W)
+
+            if py1 > py0 and px1 > px0:
+                # Calculate crops if word spills over page boundary
+                wx0, wy0 = px0 - x_cursor, py0 - y_top
+                wx1, wy1 = wx0 + (px1 - px0), wy0 + (py1 - py0)
+                if wx0 == 0 and wy0 == 0 and wx1 == ww and wy1 == wh:
+                    word_cropped = word_img
+                else:
+                    word_cropped = word_img.crop((wx0, wy0, wx1, wy1))
+
+                sum_treating += time.time_ns() - t
+                t = time.time_ns()
+
+                # Highly optimized C-level pasting using the original image's alpha mask
+                page_img.paste(word_cropped, (px0, py0), mask=word_cropped)
+                sum_pasting += time.time_ns() - t
+                t = time.time_ns()
+
+                placed_words.append(
+                    {
+                        "text": asset_meta.text,
+                        "x": int(px0),
+                        "y": int(py0),
+                        "w": int(px1 - px0),
+                        "h": int(py1 - py0),
+                    }
+                )
+                sum_json += time.time_ns() - t
+                x += 1
+
+            x_cursor += ww + params.word_gap + rng.randint(-2, 4)
+    t = time.time_ns()
+
+    lines_layer = _draw_lines_layer(rng, W, H, params, use_arc, imperfect_lines)
+    time_draw_lines = time.time_ns() - t
+
+    # C-optimized combination instead of numpy.minimum
+    t = time.time_ns()
+    ruled_img = ImageChops.darker(page_img, lines_layer).convert("L")
+    clean_img = page_img.convert("L")
+    clean_t = time.time_ns() - t
+    logger.debug(
+        f"Avg fetching {sum_fetching / x / 1_000_000}ms, avg treating {sum_treating / x / 1_000_000}ms,"
+        + f" avg pasting {sum_pasting / x / 1_000_000}ms, avg json {sum_json / x / 1_000_000}ms, draw lines {time_draw_lines / 1_000_000}, clean {clean_t / 1_000_000}"
+    )
+
+    return ruled_img, clean_img, placed_words
+
+
+def _render_task_wrapper(args):
+    """Unpacks arguments to allow process map chunking."""
+    return _render_task(*args)
 
 
 def _render_task(
@@ -253,6 +374,7 @@ def _render_task(
         imperfect_lines=imperfect_lines,
         page_index=page_index,
     )
+    logger.debug("Saving")
     ruled_img.save(f"{ruled_dir}/{page_index}.jpg", quality=92)
     clean_img.save(f"{clean_dir}/{page_index}.jpg", quality=92)
 
@@ -260,106 +382,6 @@ def _render_task(
         with open(f"{labels_dir}/{page_index}.json", "w", encoding="UTF-8") as f:
             json.dump(labels, f, indent=2)
     return page_index
-
-
-def render_page(
-    rng: random.Random,
-    use_arc: bool = True,
-    max_warp: float = 0.0,
-    imperfect_lines: bool = False,
-    page_index: int = 0,
-) -> tuple[Image.Image, Image.Image, list[dict]]:
-    params = random_page_params(rng)
-    W, H = params.width, params.height
-    n_lines = (H - params.margin_top) // params.line_spacing
-
-    page_np = np.full((H, W), _PAPER_GRAY, dtype=np.uint8)
-
-    # Unique entry offset for text compilation per page
-    token_cursor = rng.randint(0, max(1, len(_WORKER_TOKENS) - 1))
-    word_height = int(params.line_spacing * rng.uniform(0.58, 0.72))
-    placed_words = []
-
-    for line_i in range(n_lines):
-        if line_i in params.skipped:
-            continue
-
-        y_top = (
-            (params.margin_top + line_i * params.line_spacing)
-            - word_height
-            - rng.randint(2, 6)
-        )
-        if y_top < 0:
-            continue
-
-        x_cursor = params.margin_left + rng.randint(0, 12)
-
-        while x_cursor < W - 20:
-            # Safely step through mixed token identifiers
-            dset_id, asset_idx = _WORKER_TOKENS[token_cursor % len(_WORKER_TOKENS)]
-            token_cursor += 1
-
-            target_dataset = _WORKER_DATASETS[dset_id]
-
-            # Grabs properties cleanly. Custom pre-processing happens internally inside the dataset subclass!
-            try:
-                word_img = target_dataset.get_image(asset_idx)
-                asset_meta = target_dataset.assets[asset_idx]
-            except Exception:
-                continue
-
-            if max_warp > 0.0:
-                word_img = add_random_perspective(word_img, max_warp, rng)
-
-            word_img = _make_ink_word(word_img, word_height)
-            if word_img is None:
-                continue
-
-            ww, wh = word_img.size
-            if x_cursor + ww > W - rng.randint(5, 30):
-                break
-
-            # 1. Calculate target coordinates on the main canvas
-            py0, py1 = max(y_top, 0), min(y_top + wh, H)
-            px0, px1 = max(x_cursor, 0), min(x_cursor + ww, W)
-
-            # 2. Only proceed if there is a valid overlapping region
-            if py1 > py0 and px1 > px0:
-                word_np = np.array(word_img)
-
-                # 3. Calculate exact corresponding slices relative to the local word crop
-                wy0 = py0 - y_top
-                wy1 = wy0 + (py1 - py0)
-                wx0 = px0 - x_cursor
-                wx1 = wx0 + (px1 - px0)
-
-                # 4. Extract localized slices using the mapped variables
-                mask = word_np[wy0:wy1, wx0:wx1, 3] > 0
-                gray = word_np[wy0:wy1, wx0:wx1, :3].mean(axis=2).astype(np.uint8)
-
-                # 5. Perfect 1:1 shape alignment guaranteed
-                page_np[py0:py1, px0:px1][mask] = gray[mask]
-
-                placed_words.append(
-                    {
-                        "text": asset_meta.text,
-                        "x": int(px0),
-                        "y": int(py0),
-                        "w": int(px1 - px0),
-                        "h": int(py1 - py0),
-                    }
-                )
-
-            x_cursor += ww + params.word_gap + rng.randint(-2, 4)
-
-    lines_layer = _draw_lines_layer(rng, W, H, params, use_arc, imperfect_lines)
-    ruled_np = np.minimum(page_np, np.array(lines_layer))
-
-    return (
-        Image.fromarray(ruled_np).convert("RGB"),
-        Image.fromarray(page_np).convert("RGB"),
-        placed_words,
-    )
 
 
 # ---------------------------------------------------------------------------
@@ -389,11 +411,9 @@ def generate(
     if labels_dir:
         labels_dir.mkdir(parents=True, exist_ok=True)
 
-    # Use defaults if no explicit configuration properties are supplied
     if not datasets:
         datasets = {1: IAMDataset}
 
-    # Normalize properties and index counts via temporary local instances
     total_weight = sum(datasets.keys())
     normalized_sets = {
         f"ds_{i}": (cls, w / total_weight)
@@ -403,14 +423,10 @@ def generate(
     logger.info("Assembling multi-dataset token layouts...")
     mixed_tokens: list[tuple[str, int]] = []
     dataset_blueprints: dict[str, type[ImageDataset]] = {}
-
-    # Calculate target map pools (allocated at a large scale multiplier to handle distribution coverage)
     token_pool_target = max(100000, n * 40)
 
     for dset_key, (cls, weight) in normalized_sets.items():
         dataset_blueprints[dset_key] = cls
-
-        # Instantiate a dry probe configuration simply to gather dataset length
         probe = cls(preload=False)
         dset_len = len(probe)
         if dset_len == 0:
@@ -422,36 +438,42 @@ def generate(
 
     random.shuffle(mixed_tokens)
     logger.info(
-        f"Assembled shared mixed tokens. Total token pool contains: {len(mixed_tokens)} slots."
+        f"Assembled shared mixed tokens. Pool contains: {len(mixed_tokens)} slots."
     )
+
+    # Calculate optimal chunk size to lower process IPC overhead
+    chunk_size = max(1, n // (cpu_workers * 4))
+
+    tasks = [
+        (
+            i,
+            seed,
+            use_arc,
+            max_warp,
+            imperfect_lines,
+            str(ruled_dir),
+            str(clean_dir),
+            str(labels_dir) if labels_dir else None,
+        )
+        for i in range(n)
+    ]
 
     with ProcessPoolExecutor(
         max_workers=cpu_workers,
         initializer=_worker_init,
         initargs=(dataset_blueprints, preload, mixed_tokens),
     ) as pool:
-        futures = [
-            pool.submit(
-                _render_task,
-                i,
-                seed,
-                use_arc,
-                max_warp,
-                imperfect_lines,
-                str(ruled_dir),
-                str(clean_dir),
-                str(labels_dir) if labels_dir else None,
-            )
-            for i in range(n)
-        ]
-        for fut in tqdm(
-            as_completed(futures), total=n, desc="Generating mixed pages", unit="page"
+        # Use map to push large batches down the pipeline concurrently
+        for _ in tqdm(
+            pool.map(_render_task_wrapper, tasks, chunksize=chunk_size),
+            total=n,
+            desc="Generating mixed pages",
+            unit="page",
         ):
-            fut.result()
+            pass
 
     logger.info("Done. Mixed generation pipeline completed successfully.")
 
 
 if __name__ == "__main__":
-    # Standard arg parser mapping to trigger standalone execution
     generate(n=20)

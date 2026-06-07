@@ -1,6 +1,5 @@
 import tarfile
 import tempfile
-from functools import lru_cache
 from pathlib import Path
 from urllib.request import urlopen
 from zipfile import ZipFile
@@ -62,28 +61,41 @@ class IAMDataset(DownloadableDataset, ImageDataset):
         if self.preload_enabled:
             self.preload()
 
-    @lru_cache(maxsize=2000)
-    def get_image(self, idx: int) -> Image.Image:
-        """
-        Fetches the target crop asset.
-        Decorated with an LRU cache to prevent redundant runtime array manipulation loops.
-        """
-        # Call ImageDataset's core retrieval to extract raw underlying PIL state
+    # @lru_cache(maxsize=200)
+    def get_image(self, idx: int, mode="RGBA") -> Image.Image:
         img = ImageDataset.get_image(self, idx)
 
+        # Crop logic
         orig_w, orig_h = img.size
         if orig_w > 4 and orig_h > 4:
             img = img.crop((2, 2, orig_w - 2, orig_h - 2))
 
-        data = np.array(img)
-        brightness = data[..., :3].mean(axis=2)
+        # 1. Always convert to L (grayscale) first for fast processing
+        gray = np.array(img.convert("L"))
+        h, w = gray.shape
 
-        # Vectorized alpha-mask transformation
-        bg_mask = brightness > 160
-        data[bg_mask] = [255, 255, 255, 0]
-        data[~bg_mask, 3] = 255
+        # 2. Apply background masking on the 2D array
+        # This is the fastest way to handle the logic
+        bg_mask = gray > 160
+        gray[bg_mask] = 255  # Set background to white
 
-        return Image.fromarray(data, "RGBA")
+        # 3. Handle mode output
+        if mode == "L":
+            return Image.fromarray(gray, mode="L")
+
+        elif mode == "RGBA":
+            # Expand to 4 channels only if requested
+            rgba = np.zeros((h, w, 4), dtype=np.uint8)
+            # Fill RGB channels with gray value
+            rgba[..., 0:3] = gray[..., np.newaxis]
+            # Set Alpha channel: Ink=255, Background=0
+            rgba[..., 3] = np.where(bg_mask, 0, 255)
+
+            return Image.fromarray(rgba, mode="RGBA")
+
+        else:
+            # Fallback for unexpected modes
+            return Image.fromarray(gray, mode="L").convert(mode)
 
     @classmethod
     def download(cls, download_path: str, force: bool = False):

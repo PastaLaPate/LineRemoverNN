@@ -3,7 +3,6 @@ import random
 import shutil
 import tarfile
 import xml.etree.ElementTree as ElementTree
-from functools import lru_cache
 from pathlib import Path
 from urllib.request import urlopen
 
@@ -110,8 +109,8 @@ class MathWritingDataset(DownloadableDataset, ImageDataset):
         if self.preload_enabled:
             self.preload()
 
-    @lru_cache(maxsize=2000)
-    def get_image(self, idx: int) -> Image.Image:
+    # @lru_cache(maxsize=200)
+    def get_image(self, idx: int, mode="RGBA") -> Image.Image:
         """
         Parses underlying ink strokes from the file system and performs on-the-fly
         vector-to-rasterization processing directly to transparent RGBA matrices.
@@ -185,15 +184,24 @@ class MathWritingDataset(DownloadableDataset, ImageDataset):
                         stroke[0, pt_idx] + shift_x, stroke[1, pt_idx] + shift_y
                     )
                 ctx.stroke()
+        buf = surface.get_data()
 
-        # 4. Flush the byte arrays into standard PIL format
-        stride = surface.get_stride()
-        with surface.get_data() as memory:
-            pil_img = Image.frombuffer(
-                "RGBA", (width, height), memory.tobytes(), "raw", "BGRA", stride
-            )
-            # Invoke system load copy to clear volatile pointer boundaries inside multi-process pipelines
-            return pil_img.copy()
+        # 1. Create a view, NOT a copy. This is instantaneous.
+        # cairo FORMAT_ARGB32 is B-G-R-A in memory.
+        img_array = np.frombuffer(buf, dtype=np.uint8).reshape((height, width, 4))
+
+        if mode == "RGBA":
+            # Just swap channels using a view or simple index mapping
+            # This is still much faster than re-creating the image
+            return Image.fromarray(img_array[..., [2, 1, 0, 3]], mode="RGBA")
+
+        elif mode == "L":
+            # Only do the math if we specifically need Grayscale
+            # Use dot product optimized for memory efficiency
+            # Note: This is where your ~40ms overhead is coming from
+            return Image.fromarray(img_array[..., 2], mode="L")
+
+        return Image.fromarray(img_array, mode="RGBA")
 
     @classmethod
     def download(cls, download_path: str, force: bool = False):

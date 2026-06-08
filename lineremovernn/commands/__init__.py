@@ -1,3 +1,4 @@
+from lineremovernn.commands.cpp_generate_pages import GeneratePagesCPPCommand
 from lineremovernn.commands.download_dataset import DownloadDatasetCommand
 from lineremovernn.commands.generate_pages import GeneratePagesCommand
 from lineremovernn.commands.gui import GUIInferCommand
@@ -18,6 +19,7 @@ commands: list[Command] = [
     ListModelsCommand(),
     TestCommand(),
     GUIInferCommand(),
+    GeneratePagesCPPCommand(),
 ]
 
 __all__ = []

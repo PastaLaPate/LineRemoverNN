@@ -39,7 +39,19 @@ nanobind_add_module(
   _lineremovernn_ext
   src/lineremovernn_ext/bindings.cpp
   src/lineremovernn_ext/page_gen.cpp
+  src/lineremovernn_ext/datasets/iam.cpp
+  src/lineremovernn_ext/datasets/factory.cpp
 )
+
+# Insert the stub generator right after creating the module
+if (NOT CMAKE_CROSSCOMPILING)
+  nanobind_add_stub(
+    _lineremovernn_ext_stub
+    MODULE _lineremovernn_ext  
+    OUTPUT src/lineremovernn_ext/_lineremovernn_ext.pyi
+    DEPENDS _lineremovernn_ext
+  )
+endif()
 
 target_include_directories(_lineremovernn_ext PRIVATE
   src/lineremovernn_ext

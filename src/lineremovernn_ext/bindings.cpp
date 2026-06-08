@@ -12,16 +12,16 @@ NB_MODULE(_lineremovernn_ext, m) {
   m.doc() =
       "High-performance page generation and line removal (OpenCV + Cairo)";
 
-  nb::class_<Dataset>(m, "Dataset")
+  nb::class_<DatasetS>(m, "Dataset")
       .def(
           "__init__",
-          [](Dataset *d, std::string id, std::string path, float proportion) {
-            new (d) Dataset{std::move(id), std::move(path), proportion};
+          [](DatasetS *d, std::string id, std::string path, float proportion) {
+            new (d) DatasetS{std::move(id), std::move(path), proportion};
           },
           "id"_a, "path"_a, "proportion"_a = 1.0f)
-      .def_rw("id", &Dataset::id)
-      .def_rw("path", &Dataset::path)
-      .def_rw("proportion", &Dataset::proportion);
+      .def_rw("id", &DatasetS::id)
+      .def_rw("path", &DatasetS::path)
+      .def_rw("proportion", &DatasetS::proportion);
 
   m.def("generate_pages", &generate_pages, "target"_a, "datasets"_a, "n"_a = 5,
         "preload"_a = false, "use_arc"_a = true, "max_warp"_a = .1,

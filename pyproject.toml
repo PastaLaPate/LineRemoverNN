@@ -34,7 +34,6 @@ cmake.build-type = "Release"
 wheel.packages = ["lineremovernn"]
 
 [tool.scikit-build.cmake.define]
-# Pass numpy/torch paths automatically via scikit-build
 SKBUILD = "ON"
 
 [tool.uv]

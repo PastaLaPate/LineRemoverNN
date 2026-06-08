@@ -6,12 +6,16 @@
 #include <iostream>
 #include <iterator>
 #include <numeric>
+#include <opencv2/core/types.hpp>
+#include <opencv2/imgcodecs.hpp>
 #include <opencv4/opencv2/core/mat.hpp>
 #include <span>
 #include <sstream>
 #include <string>
 #include <string_view>
 #include <vector>
+
+using namespace cv;
 
 std::vector<std::string> split_ws(const std::string &s) {
   std::istringstream ss(s);
@@ -101,4 +105,11 @@ bool IAM::valid() {
 
 long IAM::len() { return this->words.size(); }
 
-cv::Mat IAM::get_image(int idx) { return cv::Mat(); };
+cv::Mat IAM::get_image(int idx) {
+  IAMWordEntry word = this->words[idx];
+  cv::Mat img = cv::imread(word.path);
+
+  cv::Rect roi(word.bbox[0], word.bbox[1], word.bbox[2], word.bbox[3]);
+
+  return img(roi).clone(); // Clone to apply
+}

@@ -2,23 +2,47 @@
 #include "barkeep/barkeep.h"
 #include "datasets/factory.h"
 #include <cairo/cairo.h>
+#include <cassert>
 #include <cmath>
+#include <cstdlib>
+#include <ctime>
 #include <filesystem>
 #include <format>
 #include <iostream>
+#include <map>
+#include <memory>
+#include <opencv2/core/hal/interface.h>
+#include <opencv2/core/mat.hpp>
+#include <opencv2/core/types.hpp>
 #include <opencv2/opencv.hpp>
 #include <stdexcept>
+#include <string>
 
 namespace fs = std::filesystem;
 namespace bk = barkeep;
 using namespace std::chrono_literals;
+using namespace cv;
+
+Dataset *select_dataset(const std::vector<std::unique_ptr<Dataset>> &datasets) {
+  float r = static_cast<float>(rand()) / static_cast<float>(RAND_MAX);
+
+  for (const auto &d : datasets) {
+    if (r < d->proportion) {
+      return d.get();
+    }
+    r -= d->proportion;
+  }
+  return datasets[0].get();
+}
 
 void generate_pages(std::filesystem::path target,
                     std::vector<DatasetS> datasets, int n, bool preload,
                     bool use_arc, float max_warp, bool imperfect_lines,
                     bool save_json) {
+
   std::cout << std::format("Generating {} pages", n) << std::endl;
   std::cout << std::format("Creating dirs...") << std::endl;
+  srand(time(0));
   fs::path ruled_dir = target / "ruled-pages";
   fs::path clean_dir = target / "clean-pages";
   fs::path labels_dir = target / "labels";
@@ -50,6 +74,7 @@ void generate_pages(std::filesystem::path target,
       throw std::invalid_argument("Invalid dataset path: " + d.path.string());
     loaded.push_back(std::move(dataset));
   }
+
   std::cout << std::format("Loading datasets...") << std::endl;
   for (const auto &d : loaded) {
     if (d->valid()) {
@@ -67,7 +92,24 @@ void generate_pages(std::filesystem::path target,
                                         .speed = 1.,
                                         .speed_unit = "page/s",
                                     });
+  std::map<std::string, int> offsets;
+  for (auto const &d : loaded) {
+    offsets[d->id] = rand() % d->len() + 1;
+  }
   for (int i = 0; i < n; i++) {
+    int w = rand() % 2000;
+    int h = rand() % 2000;
+    Mat clean = Mat::ones(w, h, CV_8UC1) * 255; // White page
+    Point cursor = {0, 0};
+    while (cursor.y + 100 < h) {   // 100 pixels margin down
+      while (cursor.x + 100 < w) { // 100 pixels margin right
+        auto d = select_dataset(loaded);
+        int offset = offsets[d->id] % d->len();
+        Mat img = d->get_image(offset);
+        offsets[d->id] += 1;
+        Size s = img.size();
+      }
+    }
     work++;
   }
   bar->done();

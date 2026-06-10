@@ -1,5 +1,5 @@
 #include "iam.h"
-#include <charconv>
+#include "../utils.hpp"
 #include <filesystem>
 #include <format>
 #include <fstream>
@@ -9,39 +9,12 @@
 #include <opencv2/core/types.hpp>
 #include <opencv2/imgcodecs.hpp>
 #include <opencv4/opencv2/core/mat.hpp>
-#include <ostream>
 #include <span>
-#include <sstream>
 #include <string>
 #include <string_view>
 #include <vector>
 
 using namespace cv;
-
-std::vector<std::string> split_ws(const std::string &s) {
-  std::istringstream ss(s);
-  return {std::istream_iterator<std::string>(ss), {}};
-}
-
-std::vector<std::string_view> split(std::string_view s, char delim) {
-  std::vector<std::string_view> tokens;
-  size_t start = 0, pos;
-  while ((pos = s.find(delim, start)) != std::string_view::npos) {
-    tokens.emplace_back(s.substr(start, pos - start));
-    start = pos + 1;
-  }
-  tokens.emplace_back(s.substr(start));
-  return tokens;
-}
-
-// Parse int — from_chars is the modern, fast, no-exception way
-int parse_int(std::string_view s) {
-  int result;
-  auto [ptr, ec] = std::from_chars(s.data(), s.data() + s.size(), result);
-  if (ec != std::errc{})
-    throw std::invalid_argument("Invalid int: \"" + std::string(s) + "\"");
-  return result;
-}
 
 void IAM::load() {
   std::ifstream WordsIndex(this->path / "words.txt");

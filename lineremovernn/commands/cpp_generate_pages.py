@@ -4,6 +4,7 @@ from pathlib import Path
 from lineremovernn._lineremovernn_ext import Dataset, generate_pages
 from lineremovernn.commands.command import Command
 from lineremovernn.data.iam import IAMDataset
+from lineremovernn.data.mathwriting import MathWritingDataset
 from lineremovernn.data.pages import PagesDataset
 from lineremovernn.utils import logging
 
@@ -69,7 +70,10 @@ class GeneratePagesCPPCommand(Command):
     def execute(self, args: Namespace) -> None:
         generate_pages(
             PagesDataset.path(),
-            datasets=[Dataset("iam", str(IAMDataset.path()), 1)],
+            datasets=[
+                Dataset("iam", str(IAMDataset.path()), 1),
+                Dataset("mathwriting", str(MathWritingDataset.path()), 0.1),
+            ],
             n=args.n,
             preload=args.preload,
             use_arc=args.arc,

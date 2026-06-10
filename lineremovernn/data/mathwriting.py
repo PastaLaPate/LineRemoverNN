@@ -86,8 +86,8 @@ class MathWritingDataset(DownloadableDataset, ImageDataset):
         DownloadableDataset.__init__(self)
         ImageDataset.__init__(self, preload=preload)
 
-        if self.available():
-            self._load_metadata()
+        # if self.available():
+        # self._load_metadata()
 
     def _load_metadata(self) -> None:
         """Indexes available math formula paths."""

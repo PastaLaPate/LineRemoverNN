@@ -301,9 +301,12 @@ void generate_single_page(int idx, int max_warp, bool use_arc,
   compression_params.push_back(95);
   std::filesystem::path clean_path = clean_dir / std::format("{}.jpg", idx);
   imwrite(clean_path, clean, compression_params);
-  draw_lines(clean, use_arc, imperfect_lines, rng);
+  Mat ruled = Mat::ones(h, w, CV_8UC1) *
+              255; // Start with a white page for ruled version
+  draw_lines(ruled, use_arc, imperfect_lines, rng);
+  cv::min(ruled, clean, ruled);
   std::filesystem::path ruled_path = ruled_dir / std::format("{}.jpg", idx);
-  imwrite(ruled_path, clean, compression_params);
+  imwrite(ruled_path, ruled, compression_params);
 }
 
 void generate_pages(std::filesystem::path target,

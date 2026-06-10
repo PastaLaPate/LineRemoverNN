@@ -85,6 +85,9 @@ cv::Mat MathWriting::get_image(int idx) {
     for (auto &point : points) {
       std::vector<std::string_view> coords = split(point, ' ');
       if (coords.size() != 3) {
+        std::cout << std::format(
+            "Warning: Skipping malformed point \"{}\" in asset {}\n", point,
+            asset_path.filename().string());
         continue;
       }
       int x = parse_int(coords[0]);
@@ -95,9 +98,6 @@ cv::Mat MathWriting::get_image(int idx) {
       strokes.push_back(std::move(sub_strokes));
     }
   }
-  std::cout << std::format(
-      "[MathWriting::get_image] Parsed asset {} with {} strokes\n",
-      asset_path.filename().string(), strokes.size());
 
   // Compute extreme stroke limits for spatial box tracking
   int xmin = std::numeric_limits<int>::max();
@@ -120,8 +120,8 @@ cv::Mat MathWriting::get_image(int idx) {
   }
 
   int margin = 6;
-  int stroke_width = rand_int(2, 7);
-  int pen_darkness = rand_int(50, 120);
+  int stroke_width = rand_int(3, 7);
+  int pen_darkness = rand_int(190, 240);
 
   int w = std::max(1, xmax - xmin + 2 * margin);
   int h = std::max(1, ymax - ymin + 2 * margin);
@@ -131,16 +131,15 @@ cv::Mat MathWriting::get_image(int idx) {
 
   auto surface = cairo_image_surface_create(CAIRO_FORMAT_A8, w, h);
   auto context = cairo_create(surface);
-  cairo_set_source_rgb(context, 0, 0, 0);
+  cairo_set_source_rgba(context, 0, 0, 0, 1);
   cairo_set_operator(context, CAIRO_OPERATOR_SOURCE);
   cairo_paint(context);
 
-  cairo_set_source_rgb(context, pen_darkness / 255.0, pen_darkness / 255.0,
-                       pen_darkness / 255.0);
+  cairo_set_source_rgba(context, 0, 0, 0, 1.0 - pen_darkness / 255.0);
   cairo_set_line_width(context, stroke_width);
   cairo_set_line_cap(context, CAIRO_LINE_CAP_ROUND);
   cairo_set_line_join(context, CAIRO_LINE_JOIN_ROUND);
-  cairo_set_operator(context, CAIRO_OPERATOR_OVER);
+  cairo_set_operator(context, CAIRO_OPERATOR_SOURCE);
 
   for (const auto &stroke : strokes) {
     int n_points = stroke.size();
@@ -157,14 +156,15 @@ cv::Mat MathWriting::get_image(int idx) {
     }
   }
   auto data = cairo_image_surface_get_data(surface);
-  cv::Mat img(h, w, CV_8UC1, data);
+  int stride = cairo_image_surface_get_stride(surface);
+  cv::Mat img(h, w, CV_8UC1, data, stride);
   cv::Mat final_img = img.clone();
   cairo_destroy(context);
   cairo_surface_destroy(surface);
 
-  std::cout << std::format(
+  /*std::cout << std::format(
       "[MathWriting::get_image] Generated image from asset {} with "
       "original bbox [({}, {}), ({}, {})], final size ({}, {})\n",
-      asset_path.filename().string(), xmin, ymin, xmax, ymax, w, h);
+      asset_path.filename().string(), xmin, ymin, xmax, ymax, w, h);*/
   return final_img;
 }

@@ -120,11 +120,24 @@ cv::Mat MathWriting::get_image(int idx) {
   }
 
   int margin = 6;
-  int stroke_width = rand_int(3, 7);
-  int pen_darkness = rand_int(190, 240);
-
   int w = std::max(1, xmax - xmin + 2 * margin);
   int h = std::max(1, ymax - ymin + 2 * margin);
+  int target = 256;
+  int min_h = 128;
+  if (h / w > 2) {
+    target = 512;
+  }
+
+  float scale = static_cast<float>(target) / std::max(w, h);
+  if (h * scale < min_h) {
+    scale = static_cast<float>(min_h) / h;
+  }
+  float target_stroke_min = 2.0f, target_stroke_max = 4.5f;
+  int stroke_width =
+      rand_int(std::max(1, static_cast<int>(target_stroke_min / scale)),
+               std::max(2, static_cast<int>(target_stroke_max / scale)));
+
+  int pen_darkness = rand_int(230, 255);
 
   int shift_x = margin - xmin;
   int shift_y = margin - ymin;
@@ -161,10 +174,18 @@ cv::Mat MathWriting::get_image(int idx) {
   cv::Mat final_img = img.clone();
   cairo_destroy(context);
   cairo_surface_destroy(surface);
+  int new_w = static_cast<int>(w * scale);
+  int new_h = static_cast<int>(h * scale);
 
-  /*std::cout << std::format(
-      "[MathWriting::get_image] Generated image from asset {} with "
-      "original bbox [({}, {}), ({}, {})], final size ({}, {})\n",
-      asset_path.filename().string(), xmin, ymin, xmax, ymax, w, h);*/
-  return final_img;
+  cv::Mat scaled;
+  cv::resize(final_img, scaled, cv::Size(new_w, new_h), 0, 0, cv::INTER_AREA);
+
+  int canvas_w = std::max(target, new_w);
+  int canvas_h = std::max(target, new_h);
+
+  cv::Mat padded(canvas_h, canvas_w, CV_8UC1, cv::Scalar(255));
+  int x_offset = (canvas_w - new_w) / 2;
+  int y_offset = (canvas_h - new_h) / 2;
+  scaled.copyTo(padded(cv::Rect(x_offset, y_offset, new_w, new_h)));
+  return padded;
 }

@@ -43,6 +43,9 @@ nanobind_add_module(
   src/lineremovernn_ext/datasets/mathwriting.cpp
   src/lineremovernn_ext/datasets/factory.cpp
   src/lineremovernn_ext/utils.hpp
+  src/lineremovernn_ext/pugixml/pugiconfig.hpp
+  src/lineremovernn_ext/pugixml/pugixml.hpp
+  src/lineremovernn_ext/pugixml/pugixml.cpp
 )
 
 # Insert the stub generator right after creating the module

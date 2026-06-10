@@ -21,7 +21,7 @@ execute_process(
 find_package(nanobind CONFIG REQUIRED)
 
 # --- OpenCV (system) ---
-find_package(OpenCV REQUIRED COMPONENTS core imgproc photo)
+find_package(OpenCV REQUIRED COMPONENTS core imgproc photo imgcodecs)
 
 # --- Cairo ---
 find_package(PkgConfig REQUIRED)

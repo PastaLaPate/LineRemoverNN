@@ -4,5 +4,6 @@
   "editor.codeActionsOnSave": {
     "source.fixAll.ruff": "always",
     "source.organizeImports.ruff": "always"
-  }
+  },
+  "discord.enabled": true
 }

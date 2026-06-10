@@ -9,7 +9,6 @@
 > [!CAUTION]
 > This V2 version of the project is a complete rewrite from scratch. It uses a more modern stack, a single main file instead of individual files and better file tree.
 > It is experimental and subject to changes. The current model already seems more powerful than the last one but I still need to train it for longer and make it even stronger against big page transformations.
-> 
 
 ## Introduction
 
@@ -26,6 +25,10 @@ UV Package manager.
 CUDA. If you have amd gpu idk i dont have one.
 
 ### Install Dependencies
+
+`sudo apt install libopencv-dev`
+
+`bash ./dev-install.sh` Builds the cpp page generation module.
 
 `uv sync`
 
@@ -47,11 +50,13 @@ Run `uv run lineremovernn train -e 25 -l -b 6`
 `-l` to load a before trained model (to continue training)
 
 ## Other commands:
+
 `uv run lineremovernn ls-models` to list models.
 `uv run lineremovernn model-info` to show the model arch.
 `uv run lineremovernn test -n 5` to test a model agaisnt some dataset pages.
 
 ## Usage
+
 No lib for the moment.
 You can use the gui:
 `uv run lineremovernn gui-infer`

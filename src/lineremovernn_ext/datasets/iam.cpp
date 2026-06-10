@@ -9,6 +9,7 @@
 #include <opencv2/core/types.hpp>
 #include <opencv2/imgcodecs.hpp>
 #include <opencv4/opencv2/core/mat.hpp>
+#include <ostream>
 #include <span>
 #include <sstream>
 #include <string>
@@ -107,9 +108,7 @@ long IAM::len() { return this->words.size(); }
 
 cv::Mat IAM::get_image(int idx) {
   IAMWordEntry word = this->words[idx];
-  cv::Mat img = cv::imread(word.path);
-
-  cv::Rect roi(word.bbox[0], word.bbox[1], word.bbox[2], word.bbox[3]);
-
-  return img(roi).clone(); // Clone to apply
+  cv::Mat img = cv::imread(word.path, IMREAD_GRAYSCALE);
+  img.setTo(255, img > 160);
+  return img;
 }

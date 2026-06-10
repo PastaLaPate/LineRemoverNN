@@ -28,7 +28,7 @@ class GeneratePagesCPPCommand(Command):
             "-mw",
             "--max-warp",
             type=float,
-            default=0.1,
+            default=0.16,
             help="Maximum perspective warp factor for word crops (0.0 to disable, old default was 0.3)",
         )
         parser.add_argument(

@@ -109,6 +109,9 @@ long IAM::len() { return this->words.size(); }
 cv::Mat IAM::get_image(int idx) {
   IAMWordEntry word = this->words[idx];
   cv::Mat img = cv::imread(word.path, IMREAD_GRAYSCALE);
+  if (img.empty()) {
+    return img;
+  }
   img.setTo(255, img > 160);
   return img;
 }

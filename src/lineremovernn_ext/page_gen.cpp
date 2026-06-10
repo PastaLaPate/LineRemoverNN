@@ -288,8 +288,7 @@ void generate_single_page(int idx, int max_warp, bool use_arc,
         max_h = warped_text.rows;
       }
       Rect target_roi(cursor, warped_text.size());
-
-      warped_text.copyTo(clean(target_roi));
+      clean(target_roi) = cv::min(clean(target_roi), warped_text);
 
       cursor.x += warped_text.cols + rand_int(-5, 25);
     }

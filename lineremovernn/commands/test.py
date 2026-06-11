@@ -12,6 +12,7 @@ from lineremovernn.data.pages import PagesDataset
 from lineremovernn.model.model import LineRemovalUNet
 from lineremovernn.utils import logging
 from lineremovernn.utils.consts import DEFAULT_MODELS, DEVICE
+from lineremovernn.utils.loss import criterion
 from lineremovernn.utils.saver import (
     get_latest_model,
     load_model,
@@ -50,6 +51,12 @@ class TestCommand(Command):
             help="Training dataset's path.",
         )
         parser.add_argument(
+            "-l",
+            "--loss",
+            action="store_true",
+            help="Show loss with target.",
+        )
+        parser.add_argument(
             "-m",
             "--m",
             type=Path,
@@ -75,27 +82,22 @@ class TestCommand(Command):
         transforms = v2.Compose(
             (
                 [
-                    # STEP 1: Fast crop to a slightly larger intermediate size.
-                    # Slashes canvas from 1.5M pixels down to ~147k pixels.
                     v2.RandomCrop(
                         (384, 384),
                         pad_if_needed=True,
                         fill=0,
                         padding_mode="constant",
                     ),
-                    # STEP 2: Run heavy geometric warps on the tiny canvas.
-                    # (Also fixed fill=255 to fill=0 to keep your black padding consistent!)
                     v2.RandomPerspective(distortion_scale=0.15, p=0.5, fill=0),
                     v2.RandomAffine(
                         degrees=(-1.5, 1.5),
                         scale=(
                             0.75,
                             1.3,
-                        ),  # 384 * 0.75 = 288 (still safely larger than 256)
+                        ),
                         shear=(-4, 4),
                         fill=0,
                     ),
-                    # STEP 3: Final cut to your model's exact input size.
                     v2.RandomCrop(
                         (256, 256),
                         pad_if_needed=True,
@@ -119,6 +121,7 @@ class TestCommand(Command):
         inputs = []
         preds = []
         ground_truths = []
+        losses: list[float] = []
 
         logger.info(f"Gathering {args.n} samples for visual inference...")
         with torch.no_grad():
@@ -129,7 +132,6 @@ class TestCommand(Command):
 
                 with autocast(DEVICE):
                     pred = model(ruled)
-                    logger.info(f"Sample {i} generated.")
 
                 ruled = ruled.cpu()
                 pred = torch.clamp(pred.cpu(), 0, 1)
@@ -141,6 +143,10 @@ class TestCommand(Command):
                     inputs.append(ruled[i])
                     preds.append(pred[i])
                     ground_truths.append(clean[i])
+                    if args.loss:
+                        loss = criterion(pred[i], clean[i])
+                        losses.append(loss.item())
+                        logger.info(f"Sample {i} generated. Loss : {loss.item()}")
 
                 if len(inputs) >= args.n:
                     break
@@ -164,6 +170,7 @@ class TestCommand(Command):
             cmap = "gray" if in_img.ndim == 2 else None
 
             # Row 0: Input (Ruled line image)
+            axes[0, col_idx].set_title(f"In {col_idx + 1}", fontsize=12)
             axes[0, col_idx].imshow(in_img, cmap=cmap)
             axes[0, col_idx].axis("off")
             if col_idx == 0:
@@ -172,14 +179,23 @@ class TestCommand(Command):
                 )
 
             # Row 1: Model Prediction
+            axes[1, col_idx].set_title(
+                f"Pred {col_idx + 1} Loss : {'{:.4f}'.format(losses[col_idx])}"
+                if args.loss
+                else f"Pred {col_idx + 1}",
+                fontsize=12,
+            )
             axes[1, col_idx].imshow(pred_img, cmap=cmap)
             axes[1, col_idx].axis("off")
             if col_idx == 0:
                 axes[1, col_idx].set_ylabel(
-                    "Prediction", fontsize=14, fontweight="bold"
+                    "Prediction",
+                    fontsize=14,
+                    fontweight="bold",
                 )
 
             # Row 2: Ground Truth (Clean image)
+            axes[2, col_idx].set_title(f"Target {col_idx + 1}", fontsize=12)
             axes[2, col_idx].imshow(gt_img, cmap=cmap)
             axes[2, col_idx].axis("off")
             if col_idx == 0:

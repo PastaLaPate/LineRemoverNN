@@ -1,5 +1,4 @@
 from argparse import Namespace
-from pathlib import Path
 
 from lineremovernn.commands.command import Command
 from lineremovernn.data import downloadable_datasets
@@ -18,14 +17,6 @@ class DownloadDatasetCommand(Command):
         )
 
     def init_parser(self, parser):
-        parser.add_argument(
-            "-o",
-            "--output-dir",
-            type=Path,
-            required=False,
-            default=None,
-            help="Directory to save the downloaded dataset.",
-        )
         parser.add_argument(
             "-fd",
             "--force-download",
@@ -50,12 +41,7 @@ class DownloadDatasetCommand(Command):
     def execute(self, args: Namespace) -> None:
         if args.dataset == "iam":
             dataset = IAMDataset()
-            dataset.install(args.force_download, args.output_dir, args.output_dir)
+            dataset.install(args.force_download, args.force_extract)
         elif args.dataset == "mathwriting":
             dataset = MathWritingDataset()
-            dataset.install(
-                args.force_download,
-                args.force_extract,
-                args.output_dir,
-                args.output_dir,
-            )
+            dataset.install(args.force_download, args.force_extract)

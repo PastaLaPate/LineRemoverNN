@@ -1,23 +1,89 @@
+import argparse
 from argparse import Namespace
-from pathlib import Path
+from typing import Sequence
 
+from lineremovernn._lineremovernn_ext import Dataset, generate_pages
 from lineremovernn.commands.command import Command
 from lineremovernn.data.iam import IAMDataset
 from lineremovernn.data.mathwriting import MathWritingDataset
-from lineremovernn.data.pages_generator import generate
+from lineremovernn.data.pages import PagesDataset
 from lineremovernn.utils import logging
 
 logger = logging.get_logger("PageGenerator")
 
 
-class GeneratePagesCommand(Command):
+class ParseDatasets(argparse.Action):
+    ALLOWED_DATASETS = {IAMDataset.ID.lower(), MathWritingDataset.ID.lower()}
+
+    def __call__(
+        self,
+        parser: argparse.ArgumentParser,
+        namespace: Namespace,
+        values: str | Sequence[str] | None,
+        option_string: str | None = None,
+    ) -> None:
+        datasets_dict: dict[str, float] = {}
+
+        if not values:
+            raise parser.error("No datasets given")
+        if isinstance(values, str):
+            values = [values]
+
+        for item in values:
+            try:
+                name, proportion_str = item.split(":")
+                proportion = float(proportion_str)
+            except ValueError:
+                raise parser.error(
+                    f"Invalid format for '{item}'. Must be 'name:proportion' (e.g., iam:0.5)"
+                )
+            name_lower = name.lower()
+            if name_lower not in self.ALLOWED_DATASETS:
+                raise parser.error(
+                    f"Unknown dataset ID '{name}'. Allowed IDs are: {', '.join(sorted(self.ALLOWED_DATASETS))}"
+                )
+
+            if name_lower in datasets_dict:
+                raise parser.error(
+                    f"Duplicate dataset ID detected: '{name}' was provided more than once."
+                )
+
+            datasets_dict[name_lower] = proportion
+        datasets: list[Dataset] = []
+        for dataset_id, p in datasets_dict.items():
+            if dataset_id == IAMDataset.ID.lower():
+                if not IAMDataset.available():
+                    raise parser.error("IAM Dataset isn't available")
+                datasets.append(
+                    Dataset(IAMDataset.ID.lower(), str(IAMDataset.path()), p)
+                )
+            elif dataset_id == MathWritingDataset.ID.lower():
+                if not MathWritingDataset.available():
+                    raise parser.error("Mathwriting Dataset isn't available")
+                datasets.append(
+                    Dataset(
+                        MathWritingDataset.ID.lower(), str(MathWritingDataset.path()), p
+                    )
+                )
+
+        setattr(namespace, self.dest, datasets)
+
+
+class GeneratePagesCPPCommand(Command):
     def __init__(self):
         super().__init__(
             name="generate-pages",
-            description="Generate pages from the IAM dataset for training.",
+            description="Generate pages from the specified datasets for training.",
         )
 
     def init_parser(self, parser):
+        parser.add_argument(
+            "--datasets",
+            nargs="+",
+            action=ParseDatasets,
+            default=[Dataset(IAMDataset.ID.lower(), str(IAMDataset.path()), 1)],
+            help="Space-separated datasets and proportions (e.g., iam:1 mathwriting:0.3)",
+        )
         parser.add_argument(
             "-n", "--n", type=int, default=50, help="Number of page pairs to generate"
         )
@@ -28,7 +94,7 @@ class GeneratePagesCommand(Command):
             "-mw",
             "--max-warp",
             type=float,
-            default=0.1,
+            default=0.16,
             help="Maximum perspective warp factor for word crops (0.0 to disable, old default was 0.3)",
         )
         parser.add_argument(
@@ -50,15 +116,6 @@ class GeneratePagesCommand(Command):
             help="Export ground-truth word layout coordinates as JSON files",
         )
         parser.add_argument(
-            "-s", "--seed", type=int, default=None, help="RNG seed for reproducibility"
-        )
-        parser.add_argument(
-            "-i", "--iam", type=Path, default=None, help="Override IAM dataset path"
-        )
-        parser.add_argument(
-            "-o", "--out", type=Path, default=None, help="Override output target path"
-        )
-        parser.add_argument(
             "-w",
             "--workers",
             type=int,
@@ -67,15 +124,13 @@ class GeneratePagesCommand(Command):
         )
 
     def execute(self, args: Namespace) -> None:
-        generate(
+        generate_pages(
+            PagesDataset.path(),
+            datasets=args.datasets,
             n=args.n,
-            use_arc=args.arc,
-            imperfect_lines=args.imperfect_lines,
-            max_warp=args.max_warp,
-            save_json=args.save_json,
-            seed=args.seed,
-            target=args.out,
-            workers=args.workers,
             preload=args.preload,
-            datasets={0.51: IAMDataset, 0.49: MathWritingDataset},
+            use_arc=args.arc,
+            max_warp=args.max_warp,
+            imperfect_lines=args.imperfect_lines,
+            save_json=args.save_json,
         )

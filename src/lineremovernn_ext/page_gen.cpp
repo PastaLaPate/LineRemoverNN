@@ -263,6 +263,10 @@ void generate_single_page(int idx, int max_warp, bool use_arc,
 
   Point cursor = {margin_left, 50};
   while (cursor.y < h) {
+    if (rand_float() > 0.9) { // 10% Chance skip line
+      cursor.y += rand_int(140, 230);
+      continue;
+    }
     int max_h = 0;
     while (cursor.x < w) {
       auto d = select_dataset(loaded, rng);

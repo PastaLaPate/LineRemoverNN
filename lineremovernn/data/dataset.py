@@ -31,8 +31,9 @@ class Dataset(ABC):
     def __init__(self):
         pass
 
-    def available(self) -> bool:
-        return self.path().exists()
+    @classmethod
+    def available(cls) -> bool:
+        return cls.path().exists()
 
     @abstractmethod
     def __len__(self) -> int:

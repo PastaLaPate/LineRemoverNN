@@ -189,8 +189,8 @@ class LineRemoverApp:
 
             # Convert back to PIL
             self.processed_image = self.to_pil(output_tensor)
-
-            self.display_preview(self.processed_image, self.lbl_output)
+            if self.processed_image:
+                self.display_preview(self.processed_image, self.lbl_output)
             self.btn_save.config(state=tk.NORMAL)
 
         except Exception as e:

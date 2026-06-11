@@ -1,21 +1,22 @@
 from argparse import Namespace
 from pathlib import Path
 
-from lineremovernn._lineremovernn_ext import Dataset, generate_pages
 from lineremovernn.commands.command import Command
-from lineremovernn.data.iam import IAMDataset
-from lineremovernn.data.mathwriting import MathWritingDataset
-from lineremovernn.data.pages import PagesDataset
 from lineremovernn.utils import logging
 
-logger = logging.get_logger("CPPPageGenerator")
+"""
+from lineremovernn.data.iam import IAMDataset
+from lineremovernn.data.mathwriting import MathWritingDataset
+from lineremovernn.data.pages_generator import generate"""
+
+logger = logging.get_logger("PageGenerator")
 
 
-class GeneratePagesCPPCommand(Command):
+class GeneratePagesCommand(Command):
     def __init__(self):
         super().__init__(
-            name="cpp-generate-pages",
-            description="Generate pages from the IAM dataset for training. Using CPP Experimental page generator.",
+            name="generate-pages-python",
+            description="Generate pages from the IAM dataset for training.",
         )
 
     def init_parser(self, parser):
@@ -29,7 +30,7 @@ class GeneratePagesCPPCommand(Command):
             "-mw",
             "--max-warp",
             type=float,
-            default=0.16,
+            default=0.1,
             help="Maximum perspective warp factor for word crops (0.0 to disable, old default was 0.3)",
         )
         parser.add_argument(
@@ -68,16 +69,18 @@ class GeneratePagesCPPCommand(Command):
         )
 
     def execute(self, args: Namespace) -> None:
-        generate_pages(
-            PagesDataset.path(),
-            datasets=[
-                Dataset("iam", str(IAMDataset.path()), 1),
-                Dataset("mathwriting", str(MathWritingDataset.path()), 0.3),
-            ],
-            n=args.n,
-            preload=args.preload,
-            use_arc=args.arc,
-            max_warp=args.max_warp,
-            imperfect_lines=args.imperfect_lines,
-            save_json=args.save_json,
+        logger.warning(
+            "This generator is deprecated and you should absolutely not use it. If you want to force its execution for some stupid reason, uncomment all commented lines in the lineremovernn/commands/generate_pages_python.py file"
         )
+        """generate(
+            n=args.n,
+            use_arc=args.arc,
+            imperfect_lines=args.imperfect_lines,
+            max_warp=args.max_warp,
+            save_json=args.save_json,
+            seed=args.seed,
+            target=args.out,
+            workers=args.workers,
+            preload=args.preload,
+            datasets={0.51: IAMDataset, 0.49: MathWritingDataset},
+        )"""

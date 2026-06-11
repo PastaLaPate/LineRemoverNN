@@ -83,6 +83,8 @@ No lib for the moment.
 You can use the gui:
 `uv run lineremovernn gui-infer`
 
-```
+## License
 
-```
+Copyright (C) 2026 PastaLaPate.
+
+This project is licensed under the GNU Affero General Public License v3 (AGPLv3) - see the [LICENSE](LICENSE) file for details.

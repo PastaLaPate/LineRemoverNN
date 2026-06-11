@@ -1,4 +1,4 @@
-# Line Remover NN 🚀
+# Line Remover NN
 
 [![PastaLaPate - LineRemoverNN](https://img.shields.io/static/v1?label=PastaLaPate&message=LineRemoverNN&color=blue&logo=github)](https://github.com/PastaLaPate/LineRemoverNN "Go to GitHub repo")
 [![stars - LineRemoverNN](https://img.shields.io/github/stars/PastaLaPate/LineRemoverNN?style=social)](https://github.com/PastaLaPate/LineRemoverNN)
@@ -15,7 +15,7 @@
 This repos uses PyTorch to remove ruled lines from an image while reconstructing overlapping characters with lines.
 The goal of this model is to make easier the word recognition from OCR.
 
-![Example](images/Figure_2.png)
+![Example](.github/Figure_1.png)
 
 ## Installation
 

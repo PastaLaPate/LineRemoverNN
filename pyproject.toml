@@ -24,7 +24,8 @@ dependencies = [
 requires = [
     "scikit-build-core>=0.10",
     "nanobind>=2.0",
-    "opencv-python>=4.13.0.92"
+    "opencv-python>=4.13.0.92",
+    "numpy"
 ]
 build-backend = "scikit_build_core.build"
 

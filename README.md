@@ -26,11 +26,33 @@ CUDA. If you have amd gpu idk i dont have one.
 
 ### Install Dependencies
 
-`sudo apt install libopencv-dev`
+#### Windows (limited support)
 
-`bash ./dev-install.sh` Builds the cpp page generation module.
+1: Use MSYS (UCRT64):
+
+```bash
+pacman -S mingw-w64-ucrt-x86_64-gcc mingw-w64-ucrt-x86_64-cmake \
+ mingw-w64-ucrt-x86_64-pkg-config mingw-w64-ucrt-x86_64-cairo \
+ mingw-w64-ucrt-x86_64-opencv
+```
+
+2: Native: somehow use vcpkg.
+
+#### Linux:
+
+`sudo apt install -y build-essential cmake pkg-config libcairo2-dev libopencv-dev`
+
+#### Mac/Linux:
+
+`brew install cmake pkg-config cairo opencv`
+
+#### Then
 
 `uv sync`
+
+#### Dev:
+
+`bash ./dev-install.sh` Forces build of the cpp generation module, also generates compile_commands.json for clangd.
 
 ### Install IAM Dataset 🗒️
 
@@ -60,3 +82,7 @@ Run `uv run lineremovernn train -e 25 -l -b 6`
 No lib for the moment.
 You can use the gui:
 `uv run lineremovernn gui-infer`
+
+```
+
+```

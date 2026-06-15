@@ -52,9 +52,12 @@ Dataset *select_dataset(const std::vector<std::unique_ptr<Dataset>> &datasets,
 }
 
 void add_random_perspective(const Mat &img, Mat &transformed, float max_warp,
-                            std::mt19937 &rng) {
+                            int target_height, std::mt19937 &rng) {
   if (max_warp <= 0.0f) {
-    transformed = img.clone();
+    float scale = static_cast<float>(target_height) / img.rows;
+    int target_width = std::max(1, static_cast<int>(img.cols * scale));
+    resize(img, transformed, Size(target_width, target_height), 0, 0,
+           INTER_LINEAR);
     return;
   }
 
@@ -93,8 +96,16 @@ void add_random_perspective(const Mat &img, Mat &transformed, float max_warp,
   int new_width = std::max(1, static_cast<int>(max_x - min_x));
   int new_height = std::max(1, static_cast<int>(max_y - min_y));
 
+  float scale = static_cast<float>(target_height) / new_height;
+  int target_width = std::max(1, static_cast<int>(new_width * scale));
+
+  // Shift the matrix to (0,0)
   matrix.row(0) -= min_x * matrix.row(2);
   matrix.row(1) -= min_y * matrix.row(2);
+
+  // Scale the matrix to scale the image to target height
+  matrix.row(0) *= scale;
+  matrix.row(1) *= scale;
 
   Scalar border_val;
   if (img.channels() == 1) {
@@ -103,7 +114,7 @@ void add_random_perspective(const Mat &img, Mat &transformed, float max_warp,
     border_val = Scalar(255, 255, 255, 255);
   }
 
-  warpPerspective(img, transformed, matrix, Size(new_width, new_height),
+  warpPerspective(img, transformed, matrix, Size(target_width, target_height),
                   INTER_LINEAR, BORDER_CONSTANT, border_val);
 }
 
@@ -299,7 +310,8 @@ void generate_single_page(int idx, int max_warp, bool use_arc, bool document,
                   << std::endl;
         continue; // Skip this iteration safely without crashing!
       }
-      add_random_perspective(img, warped_text, max_warp, rng);
+      // Scale using the same matrix instead of mapping 2 times
+      add_random_perspective(img, warped_text, max_warp, line_height, rng);
       if (cursor.x + warped_text.cols >= w) {
         break;
       }
@@ -316,7 +328,7 @@ void generate_single_page(int idx, int max_warp, bool use_arc, bool document,
       cursor.x += warped_text.cols + rand_int(-5, 25);
     }
     cursor.x = margin_left + rand_int(0, 20);
-    cursor.y += max_h + rand_int(20, 30);
+    cursor.y += line_height + rand_int(20, 30); // max_h + rand_int(20, 30);
   }
 
   std::vector<int> compression_params;

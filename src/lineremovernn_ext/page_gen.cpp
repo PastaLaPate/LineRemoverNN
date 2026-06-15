@@ -237,7 +237,7 @@ void draw_lines(Mat &img, bool use_arc, bool imperfect_lines,
   }
 }
 
-void generate_single_page(int idx, int max_warp, bool use_arc,
+void generate_single_page(int idx, int max_warp, bool use_arc, bool document,
                           bool imperfect_lines,
                           const std::vector<std::unique_ptr<Dataset>> &loaded,
                           unsigned int seed, const fs::path &clean_dir,
@@ -255,8 +255,27 @@ void generate_single_page(int idx, int max_warp, bool use_arc,
     offsets[d->id] = rand_int(0, d->len() - 1);
   }
 
-  int w = rand_int(400, 1600);
-  int h = rand_int(400, 2000);
+  int w;
+  int h;
+  if (document) {
+    float aspect_rand = rand_float();
+    float aspect;
+    h = rand_int(1000, 2000);
+    // Either sqrt(2) aspect (A serie), 17:22 (American letter), or 17:28
+    // (American legal)
+    if (aspect_rand < 1.0f / 3.0f) {
+      aspect = 1.0f / std::sqrt(2.0f);
+    } else if (aspect_rand < 2.0f / 3.0f && aspect_rand >= 1.0f / 3) {
+      aspect = 17.f / 22.f;
+    } else if (aspect_rand >= 2.0f / 3.0f) {
+      aspect = 17.f / 28.f;
+    }
+    w = static_cast<int>(std::round(h * aspect));
+  } else {
+    w = rand_int(500, 1600);
+    h = rand_int(800, 2000);
+  }
+  int line_height = rand_int(90, 180);
   int margin_left = 50 + rand_int(0, 200);
   Mat clean = Mat::ones(h, w, CV_8UC1) * rand_int(220, 255); // White page
   Mat warped_text;
@@ -315,8 +334,8 @@ void generate_single_page(int idx, int max_warp, bool use_arc,
 
 void generate_pages(std::filesystem::path target,
                     std::vector<DatasetS> datasets, int n, bool preload,
-                    bool use_arc, float max_warp, bool imperfect_lines,
-                    bool save_json) {
+                    bool use_arc, bool document, float max_warp,
+                    bool imperfect_lines, bool save_json) {
   std::signal(SIGINT, signal_handler);
 
   shutdown_requested = false;
@@ -397,8 +416,8 @@ void generate_pages(std::filesystem::path target,
           break; // No more pages left to generate
         }
 
-        generate_single_page(i, max_warp, use_arc, imperfect_lines, loaded, 0,
-                             clean_dir, ruled_dir);
+        generate_single_page(i, max_warp, use_arc, document, imperfect_lines,
+                             loaded, 0, clean_dir, ruled_dir);
 
         {
           std::lock_guard<std::mutex> lock(progress_mutex);

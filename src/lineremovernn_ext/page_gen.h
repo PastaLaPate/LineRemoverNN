@@ -6,5 +6,5 @@
 
 void generate_pages(std::filesystem::path target,
                     std::vector<DatasetS> datasets, int n, bool preload,
-                    bool use_arc, float max_warp, bool imperfect_lines,
-                    bool save_json);
+                    bool use_arc, bool document, float max_warp,
+                    bool imperfect_lines, bool save_json);

@@ -16,6 +16,16 @@ Dataset -> Standard class, name, path, etc.
   TorchDataset -> Dataset that can be used with PyTorch DataLoader. Ex: PagesDataset
 """
 
+"""Datasets to add:
+http://ai2-website.s3.amazonaws.com/data/ai2d-all.zip
+
+https://huggingface.co/datasets/zhibei1204/DiagramQG/resolve/main/DiagramQG-1-3000.zip?download=true
+https://huggingface.co/datasets/zhibei1204/DiagramQG/resolve/main/DiagramQG-3501-4000.zip?download=true
+https://huggingface.co/datasets/zhibei1204/DiagramQG/resolve/main/DiagramQG-4000-6500.zip?download=true
+https://huggingface.co/datasets/zhibei1204/DiagramQG/resolve/main/DiagramQG-10001-20000.zip?download=true
+https://huggingface.co/datasets/zhibei1204/DiagramQG/resolve/main/DiagramQG-20001-final.zip?download=true
+"""
+
 logger = logging.getLogger("Dataset")
 
 

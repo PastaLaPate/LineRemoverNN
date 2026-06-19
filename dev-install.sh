@@ -5,7 +5,7 @@ set -e
 uv add --dev nanobind scikit-build-core
 
 # Build and install the extension
-uv pip install --no-build-isolation -ve .
+uv pip install --no-build-isolation -e .
 
 # Generate a separate compile_commands.json with stable paths using the venv python
 PYTHON=$(uv run which python)

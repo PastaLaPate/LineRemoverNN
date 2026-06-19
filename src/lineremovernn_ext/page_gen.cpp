@@ -1,5 +1,6 @@
 #include "page_gen.h"
 #include "barkeep/barkeep.h"
+#include "datasets/datasets.h"
 #include "datasets/factory.h"
 #include "pugixml/pugixml.hpp"
 #include <atomic>
@@ -334,7 +335,8 @@ void generate_single_page(int idx, int max_warp, bool use_arc, bool document,
     while (cursor.x < w) {
       auto d = select_dataset(loaded, rng);
       int offset = offsets[d->id] % d->len();
-      Mat img = d->get_image(offset);
+      AssetRow asset = d->get_asset(offset);
+      Mat img = asset.image;
       offsets[d->id] += 1;
       if (img.empty() || img.cols == 0 || img.rows == 0) {
         std::cerr << std::format("[Warning] Dataset '{}' returned an empty "
@@ -359,14 +361,19 @@ void generate_single_page(int idx, int max_warp, bool use_arc, bool document,
       Rect target_roi(cursor, warped_text.size());
       clean(target_roi) = cv::min(clean(target_roi), warped_text);
 
-      cursor.x += warped_text.cols + rand_int(-5, 25);
       if (save_xml) {
         word = line.append_child("word");
 
         word.append_attribute("idx") = i;
-        page.append_attribute("w") = warped_text.cols;
-        page.append_attribute("h") = warped_text.rows;
+        word.append_attribute("dataset_idx") = asset.idx;
+        word.append_attribute("dataset") = asset.dataset;
+        word.append_attribute("x") = cursor.x;
+        word.append_attribute("y") = cursor.y;
+        word.append_attribute("w") = warped_text.cols;
+        word.append_attribute("h") = warped_text.rows;
+        word.text() = asset.transcript;
       }
+      cursor.x += warped_text.cols + rand_int(-5, 25);
       i++;
     }
     cursor.x = margin_left + rand_int(0, 20);
@@ -384,6 +391,9 @@ void generate_single_page(int idx, int max_warp, bool use_arc, bool document,
   cv::min(ruled, clean, ruled);
   std::filesystem::path ruled_path = ruled_dir / std::format("{}.jpg", idx);
   imwrite(ruled_path, ruled, compression_params);
+  if (save_xml) {
+    doc.save_file((labels_dir / std::format("{}.xml", idx)).c_str());
+  }
 }
 
 void generate_pages(std::filesystem::path target,

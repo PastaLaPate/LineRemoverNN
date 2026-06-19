@@ -61,7 +61,10 @@ bool MathWriting::valid() {
 
 long MathWriting::len() { return this->assets.size(); }
 
-cv::Mat MathWriting::get_image(int idx) {
+cv::Mat MathWriting::get_image(int idx) { return this->get_asset(idx).image; }
+
+AssetRow MathWriting::get_asset(int idx) {
+
   static thread_local std::mt19937 rng(std::random_device{}());
   auto rand_int = [&](int lo, int hi) {
     return std::uniform_int_distribution<int>(lo, hi)(rng);
@@ -72,9 +75,19 @@ cv::Mat MathWriting::get_image(int idx) {
   if (!result) {
     std::cerr << "Failed to load asset: " << asset_path
               << "\nError description: " << result.description() << "\n";
-    return cv::Mat();
+    return {.idx = idx,
+            .dataset = "mathwriting",
+            .image = cv::Mat(),
+            .transcript = ""};
   }
   // Parse the XML and extract strokes data
+  std::string transcript = "";
+  for (pugi::xml_node node : doc.child("ink").children("annotation")) {
+    if (strcmp(node.attribute("type").value(), "normalizedLabel") == 0) {
+      transcript = node.text().get();
+      break;
+    }
+  }
 
   std::vector<std::vector<cv::Point>> strokes;
   for (pugi::xml_node node : doc.child("ink").children("trace")) {
@@ -187,5 +200,9 @@ cv::Mat MathWriting::get_image(int idx) {
   int x_offset = (canvas_w - new_w) / 2;
   int y_offset = (canvas_h - new_h) / 2;
   scaled.copyTo(padded(cv::Rect(x_offset, y_offset, new_w, new_h)));
-  return padded;
+
+  return {.idx = idx,
+          .dataset = "mathwriting",
+          .image = padded,
+          .transcript = transcript};
 }

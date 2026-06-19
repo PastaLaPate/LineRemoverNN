@@ -1,5 +1,6 @@
 #include "iam.h"
 #include "../utils.hpp"
+#include "datasets/datasets.h"
 #include <filesystem>
 #include <format>
 #include <fstream>
@@ -87,4 +88,20 @@ cv::Mat IAM::get_image(int idx) {
   }
   img.setTo(255, img > 160);
   return img;
+}
+
+AssetRow IAM::get_asset(int idx) {
+  IAMWordEntry word = this->words[idx];
+  cv::Mat img = cv::imread(word.path, IMREAD_GRAYSCALE);
+  if (img.empty()) {
+    return {.idx = idx,
+            .dataset = "iam",
+            .image = img,
+            .transcript = word.transcript};
+  }
+  img.setTo(255, img > 160);
+  return {.idx = idx,
+          .dataset = "iam",
+          .image = img,
+          .transcript = word.transcript};
 }

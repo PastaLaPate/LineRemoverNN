@@ -3,6 +3,13 @@
 #include <opencv2/core/mat.hpp>
 #include <string>
 
+struct AssetRow {
+  int idx;
+  std::string dataset;
+  cv::Mat image;
+  std::string transcript;
+};
+
 struct DatasetS {
   std::string id;
   std::filesystem::path path;
@@ -23,6 +30,7 @@ public:
   }
 
   virtual cv::Mat get_image(int idx) = 0;
+  virtual AssetRow get_asset(int idx) = 0;
   virtual void load() = 0; // Create internal structure mappings
   virtual bool valid() = 0;
   virtual long len() = 0;

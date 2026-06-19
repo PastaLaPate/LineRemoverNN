@@ -312,6 +312,9 @@ void generate_single_page(int idx, int max_warp, bool use_arc, bool document,
   Point cursor = {margin_left, 50};
 
   pugi::xml_node line;
+  pugi::xml_node word;
+
+  int i = 0;
 
   while (cursor.y < h) {
     if (save_xml) {
@@ -340,6 +343,7 @@ void generate_single_page(int idx, int max_warp, bool use_arc, bool document,
                   << std::endl;
         continue; // Skip this iteration safely without crashing!
       }
+
       // Scale using the same matrix instead of mapping 2 times
       add_random_perspective(img, warped_text, max_warp, line_height, rng);
       if (cursor.x + warped_text.cols >= w) {
@@ -356,6 +360,14 @@ void generate_single_page(int idx, int max_warp, bool use_arc, bool document,
       clean(target_roi) = cv::min(clean(target_roi), warped_text);
 
       cursor.x += warped_text.cols + rand_int(-5, 25);
+      if (save_xml) {
+        word = line.append_child("word");
+
+        word.append_attribute("idx") = i;
+        page.append_attribute("w") = warped_text.cols;
+        page.append_attribute("h") = warped_text.rows;
+      }
+      i++;
     }
     cursor.x = margin_left + rand_int(0, 20);
     cursor.y += line_height + rand_int(10, 18); // max_h + rand_int(20, 30);

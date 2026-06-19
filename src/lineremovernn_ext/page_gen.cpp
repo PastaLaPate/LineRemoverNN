@@ -1,6 +1,7 @@
 #include "page_gen.h"
 #include "barkeep/barkeep.h"
 #include "datasets/factory.h"
+#include "pugixml/pugixml.hpp"
 #include <atomic>
 #include <cairo/cairo.h>
 #include <cassert>
@@ -123,11 +124,12 @@ void draw_lines(Mat &img, bool use_arc, bool imperfect_lines,
   int W = img.cols;
   int H = img.rows;
 
-  std::uniform_int_distribution<int> line_spacing_dist(35, 100);
-  std::uniform_int_distribution<int> sub_line_spacing_dist(3, 6);
+  std::uniform_int_distribution<int> line_spacing_dist(45, 100);
+  std::uniform_int_distribution<int> sub_line_spacing_dist(2, 5);
   std::uniform_int_distribution<int> rand_color(100, 180);
-  std::uniform_int_distribution<int> rand_sub_color(200, 240);
+  std::uniform_int_distribution<int> rand_sub_color(160, 190);
   std::uniform_int_distribution<int> rand_lw(1, 3);
+  std::uniform_int_distribution<int> rand_sub_lw(1, 2);
   std::uniform_int_distribution<int> rand_jitter(-3, 3);
   std::uniform_real_distribution<float> rand_amp(-15.0f, 15.0f);
 
@@ -197,7 +199,7 @@ void draw_lines(Mat &img, bool use_arc, bool imperfect_lines,
       bool is_main = (j == 0 || j == sub - 1);
 
       int darkness = is_main ? rand_color(rng) : rand_sub_color(rng);
-      int lw = is_main ? rand_lw(rng) : 1;
+      int lw = is_main ? rand_lw(rng) : rand_sub_lw(rng);
       int y_off = rand_jitter(rng);
 
       if (use_arc) {
@@ -249,10 +251,15 @@ void draw_lines(Mat &img, bool use_arc, bool imperfect_lines,
 }
 
 void generate_single_page(int idx, int max_warp, bool use_arc, bool document,
-                          bool imperfect_lines,
+                          bool imperfect_lines, bool save_xml,
                           const std::vector<std::unique_ptr<Dataset>> &loaded,
                           unsigned int seed, const fs::path &clean_dir,
-                          const fs::path &ruled_dir) {
+                          const fs::path &ruled_dir,
+                          const fs::path &labels_dir) {
+
+  pugi::xml_document doc;
+  pugi::xml_node page;
+
   std::mt19937 rng(std::random_device{}());
   auto rand_int = [&](int lo, int hi) {
     return std::uniform_int_distribution<int>(lo, hi)(rng);
@@ -271,7 +278,7 @@ void generate_single_page(int idx, int max_warp, bool use_arc, bool document,
   if (document) {
     float aspect_rand = rand_float();
     float aspect;
-    h = rand_int(1000, 2000);
+    h = rand_int(2500, 3000);
     // Either sqrt(2) aspect (A serie), 17:22 (American letter), or 17:28
     // (American legal)
     if (aspect_rand < 1.0f / 3.0f) {
@@ -286,15 +293,38 @@ void generate_single_page(int idx, int max_warp, bool use_arc, bool document,
     w = rand_int(500, 1600);
     h = rand_int(800, 2000);
   }
-  int line_height = rand_int(90, 180);
+  int line_height = rand_int(45, 65);
   int margin_left = 50 + rand_int(0, 200);
-  Mat clean = Mat::ones(h, w, CV_8UC1) * rand_int(220, 255); // White page
+  int brightness = rand_int(220, 255);
+  Mat clean = Mat::ones(h, w, CV_8UC1) * brightness; // White page
   Mat warped_text;
 
+  if (save_xml) {
+    page = doc.append_child("page");
+    page.append_attribute("idx") = idx;
+    page.append_attribute("w") = w;
+    page.append_attribute("h") = h;
+    page.append_attribute("line_height") = line_height;
+    page.append_attribute("margin_left") = margin_left;
+    page.append_attribute("brightness") = brightness;
+  }
+
   Point cursor = {margin_left, 50};
+
+  pugi::xml_node line;
+
   while (cursor.y < h) {
+    if (save_xml) {
+      line = page.append_child("line");
+    }
     if (rand_float() > 0.9) { // 10% Chance skip line
-      cursor.y += rand_int(140, 230);
+      int l_h = rand_int(70, 110);
+      if (save_xml) {
+        line.append_attribute("skipped") = true;
+        line.append_attribute("y") = cursor.y;
+        line.append_attribute("height") = l_h;
+      }
+      cursor.y += l_h;
       continue;
     }
     int max_h = 0;
@@ -328,7 +358,7 @@ void generate_single_page(int idx, int max_warp, bool use_arc, bool document,
       cursor.x += warped_text.cols + rand_int(-5, 25);
     }
     cursor.x = margin_left + rand_int(0, 20);
-    cursor.y += line_height + rand_int(20, 30); // max_h + rand_int(20, 30);
+    cursor.y += line_height + rand_int(10, 18); // max_h + rand_int(20, 30);
   }
 
   std::vector<int> compression_params;
@@ -429,7 +459,8 @@ void generate_pages(std::filesystem::path target,
         }
 
         generate_single_page(i, max_warp, use_arc, document, imperfect_lines,
-                             loaded, 0, clean_dir, ruled_dir);
+                             save_json, loaded, 0, clean_dir, ruled_dir,
+                             labels_dir);
 
         {
           std::lock_guard<std::mutex> lock(progress_mutex);

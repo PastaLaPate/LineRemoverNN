@@ -5,7 +5,7 @@ from pathlib import Path
 
 import torch
 
-from lineremovernn.model.model import LineRemovalUNet
+from lineremovernn.model.lineremover import LineRemovalUNet
 from lineremovernn.utils.consts import DEFAULT_MODELS, DEVICE
 
 logger = logging.getLogger("ModelLoader")

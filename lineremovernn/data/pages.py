@@ -3,6 +3,7 @@ import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from typing import Tuple
 
+import torch
 from torch import Tensor
 from torchvision import tv_tensors
 from torchvision.io import ImageReadMode, decode_image
@@ -18,10 +19,6 @@ class Word:
     idx: int
     dataset_idx: int
     dataset: str
-    x: int
-    y: int
-    w: int
-    h: int
     transcript: str
 
 
@@ -33,7 +30,28 @@ class Page:
     line_height: int
     margin_left: int
     brightness: int
-    lines: list[Word]
+    lines: list[list[Word]]
+    boxes: tv_tensors.BoundingBoxes
+
+    def words_with_boxes(self):
+        """Yield (line_idx, Word, box) for every word, box already split per-line."""
+        flat_idx = 0
+        for line_idx, line in enumerate(self.lines):
+            for word in line:
+                yield line_idx, word, self.boxes[flat_idx]
+                flat_idx += 1
+
+    def lines_with_boxes(self) -> list[list[Tuple["Word", Tensor]]]:
+        """Same shape as `lines`, but each entry is (Word, box) instead of just Word."""
+        out = []
+        flat_idx = 0
+        for line in self.lines:
+            line_out = []
+            for word in line:
+                line_out.append((word, self.boxes[flat_idx]))
+                flat_idx += 1
+            out.append(line_out)
+        return out
 
 
 class PagesDataset(TorchDataset):
@@ -62,45 +80,77 @@ class PagesDataset(TorchDataset):
     def __getitem__(self, idx) -> Tuple[Tensor, Tensor, Page | None]:
         ruled_img_path = self.ruled_path / f"{idx}.jpg"
         clean_img_path = self.clean_path / f"{idx}.jpg"
-        label_path = self.labels_path / f"{idx}.xml"
         ruled = decode_image(str(ruled_img_path), ImageReadMode.GRAY)
         clean = decode_image(str(clean_img_path), ImageReadMode.GRAY)
         ruled = tv_tensors.Image(ruled)
         clean = tv_tensors.Image(clean)
 
-        if self.transform:
-            ruled, clean = self.transform(ruled, clean)
         if not self.load_label:
+            if self.transform:
+                ruled, clean = self.transform(ruled, clean)
+
             return (ruled, clean, None)
         label_path = self.labels_path / f"{idx}.xml"
         if not label_path.exists():
             logger.warning("Couldnt load ", idx, "'s metadata file.")
+            if self.transform:
+                ruled, clean = self.transform(ruled, clean)
+
             return (ruled, clean, None)
         tree = ET.parse(label_path)
         root = tree.getroot()
 
-        words_list = []
+        lines_list: list[list[Word]] = []
+        boxes_list: list[list[int]] = []  # flat, XYWH, reading order
+
         for line_elem in root.findall("line"):
+            words_list = []
             for word_elem in line_elem.findall("word"):
                 word = Word(
                     idx=int(word_elem.attrib["idx"]),
                     dataset_idx=int(word_elem.attrib["dataset_idx"]),
                     dataset=word_elem.attrib["dataset"],
-                    x=int(word_elem.attrib["x"]),
-                    y=int(word_elem.attrib["y"]),
-                    w=int(word_elem.attrib["w"]),
-                    h=int(word_elem.attrib["h"]),
                     transcript=word_elem.text if word_elem.text else "",
                 )
                 words_list.append(word)
+                boxes_list.append(
+                    [
+                        int(word_elem.attrib["x"]),
+                        int(word_elem.attrib["y"]),
+                        int(word_elem.attrib["w"]),
+                        int(word_elem.attrib["h"]),
+                    ]
+                )
+
+            lines_list.append(words_list)
+
+        page_w = int(root.attrib["w"])
+        page_h = int(root.attrib["h"])
+
+        if boxes_list:
+            boxes_tensor = torch.tensor(boxes_list, dtype=torch.float32)
+        else:
+            boxes_tensor = torch.zeros((0, 4), dtype=torch.float32)
+
+        boxes = tv_tensors.BoundingBoxes(
+            boxes_tensor,
+            format=tv_tensors.BoundingBoxFormat.XYWH,
+            canvas_size=(page_h, page_w),
+        )  # type: ignore
+
+        if self.transform:
+            # Pass boxes through the same call so torchvision's v2 transforms (crop/resize/flip/etc.) apply matching geometric ops to them.
+            ruled, clean, boxes = self.transform(ruled, clean, boxes)
 
         page = Page(
             idx=int(root.attrib["idx"]),
-            w=int(root.attrib["w"]),
-            h=int(root.attrib["h"]),
+            w=page_w,
+            h=page_h,
             line_height=int(root.attrib["line_height"]),
             margin_left=int(root.attrib["margin_left"]),
             brightness=int(root.attrib["brightness"]),
-            lines=words_list,
+            lines=lines_list,
+            boxes=boxes,
         )
+
         return (ruled, clean, page)

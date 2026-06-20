@@ -11,6 +11,8 @@ from lineremovernn.utils import logging
 
 logger = logging.get_logger("PageGenerator")
 
+# Ex uv run lineremovernn generate-pages -m -il -a -n 15 --datasets iam:1 mathwriting:0.3
+
 
 class ParseDatasets(argparse.Action):
     ALLOWED_DATASETS = {IAMDataset.ID.lower(), MathWritingDataset.ID.lower()}
@@ -110,10 +112,10 @@ class GeneratePagesCPPCommand(Command):
             help="Preload the images in RAM.",
         )
         parser.add_argument(
-            "-j",
-            "--save-json",
+            "-m",
+            "--save-metadata",
             action="store_true",
-            help="Export ground-truth word layout coordinates as JSON files",
+            help="Export ground-truth word layout coordinates as XML files",
         )
         parser.add_argument(
             "-w",
@@ -132,5 +134,5 @@ class GeneratePagesCPPCommand(Command):
             use_arc=args.arc,
             max_warp=args.max_warp,
             imperfect_lines=args.imperfect_lines,
-            save_json=args.save_json,
+            save_xml=args.save_metadata,
         )

@@ -399,7 +399,7 @@ void generate_single_page(int idx, int max_warp, bool use_arc, bool document,
 void generate_pages(std::filesystem::path target,
                     std::vector<DatasetS> datasets, int n, bool preload,
                     bool use_arc, bool document, float max_warp,
-                    bool imperfect_lines, bool save_json) {
+                    bool imperfect_lines, bool save_xml) {
   std::signal(SIGINT, signal_handler);
 
   shutdown_requested = false;
@@ -415,7 +415,7 @@ void generate_pages(std::filesystem::path target,
   fs::path labels_dir = target / "labels";
   fs::create_directories(ruled_dir);
   fs::create_directories(clean_dir);
-  if (save_json) {
+  if (save_xml) {
     fs::create_directories(labels_dir);
   }
 
@@ -481,7 +481,7 @@ void generate_pages(std::filesystem::path target,
         }
 
         generate_single_page(i, max_warp, use_arc, document, imperfect_lines,
-                             save_json, loaded, 0, clean_dir, ruled_dir,
+                             save_xml, loaded, 0, clean_dir, ruled_dir,
                              labels_dir);
 
         {

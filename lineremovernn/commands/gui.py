@@ -11,7 +11,7 @@ from PIL import Image, ImageTk
 from torch.amp.autocast_mode import autocast
 
 from lineremovernn.commands.command import Command
-from lineremovernn.model.model import LineRemovalUNet
+from lineremovernn.model.lineremover import LineRemovalUNet
 from lineremovernn.utils.consts import DEFAULT_MODELS, DEVICE
 from lineremovernn.utils.saver import get_latest_model, load_model
 

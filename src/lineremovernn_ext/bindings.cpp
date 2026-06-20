@@ -25,5 +25,5 @@ NB_MODULE(_lineremovernn_ext, m) {
 
   m.def("generate_pages", &generate_pages, "target"_a, "datasets"_a, "n"_a = 5,
         "preload"_a = false, "use_arc"_a = true, "document"_a = true,
-        "max_warp"_a = .1, "imperfect_lines"_a = true, "save_json"_a = false);
+        "max_warp"_a = .1, "imperfect_lines"_a = true, "save_xml"_a = false);
 }

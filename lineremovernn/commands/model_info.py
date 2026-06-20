@@ -3,7 +3,7 @@ from argparse import Namespace
 from torchinfo import summary
 
 from lineremovernn.commands.command import Command
-from lineremovernn.model.model import LineRemovalUNet
+from lineremovernn.model.lineremover import LineRemovalUNet
 from lineremovernn.utils import logging
 
 logger = logging.get_logger("ModelInfo")

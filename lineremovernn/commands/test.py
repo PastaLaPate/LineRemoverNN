@@ -9,7 +9,7 @@ from torch.utils.data import DataLoader
 
 from lineremovernn.commands.command import Command
 from lineremovernn.data.pages import PagesDataset
-from lineremovernn.model.model import LineRemovalUNet
+from lineremovernn.model.lineremover import LineRemovalUNet
 from lineremovernn.utils import logging
 from lineremovernn.utils.consts import DEFAULT_MODELS, DEVICE
 from lineremovernn.utils.loss import criterion

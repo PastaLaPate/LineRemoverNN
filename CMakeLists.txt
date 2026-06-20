@@ -52,6 +52,7 @@ nanobind_add_module(
 if (NOT CMAKE_CROSSCOMPILING)
   nanobind_add_stub(
     _lineremovernn_ext_stub
+    ALL
     MODULE _lineremovernn_ext  
     OUTPUT src/lineremovernn_ext/_lineremovernn_ext.pyi
     DEPENDS _lineremovernn_ext

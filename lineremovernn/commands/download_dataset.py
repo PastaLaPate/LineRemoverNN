@@ -2,6 +2,7 @@ from argparse import Namespace
 
 from lineremovernn.commands.command import Command
 from lineremovernn.data import downloadable_datasets
+from lineremovernn.data.ai2d import AI2DDataset
 from lineremovernn.data.iam import IAMDataset
 from lineremovernn.data.mathwriting import MathWritingDataset
 from lineremovernn.utils import logging
@@ -41,7 +42,10 @@ class DownloadDatasetCommand(Command):
     def execute(self, args: Namespace) -> None:
         if args.dataset == "iam":
             dataset = IAMDataset()
-            dataset.install(args.force_download, args.force_extract)
         elif args.dataset == "mathwriting":
             dataset = MathWritingDataset()
-            dataset.install(args.force_download, args.force_extract)
+        elif args.dataset == "ai2d":
+            dataset = AI2DDataset()
+        else:
+            raise ValueError("Dataset not found.")
+        dataset.install(args.force_download, args.force_extract)

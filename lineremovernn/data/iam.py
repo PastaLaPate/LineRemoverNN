@@ -8,7 +8,11 @@ import numpy as np
 import tqdm
 from PIL import Image
 
-from lineremovernn.data.dataset import CropAsset, DownloadableDataset, ImageDataset
+from lineremovernn.data.dataset import (
+    CropAsset,
+    DownloadableDataset,
+    ImageDataset,
+)
 from lineremovernn.utils import logging
 
 logger = logging.get_logger("IAM")
@@ -124,8 +128,18 @@ class IAMDataset(DownloadableDataset, ImageDataset):
         logger.info("Extracting word snippets from words.tgz...")
         words_out_dir = target_root / "words"
         if not words_out_dir.exists() or force:
-            with tarfile.open(words_tgz) as f:
-                f.extractall(words_out_dir)
+            with tarfile.open(words_tgz, "r:*") as tar_ref:
+                members = tar_ref.getmembers()
+
+                with tqdm.tqdm(
+                    total=len(members),
+                    unit="file",
+                    desc="Extracting Tar Archive",
+                    leave=True,
+                ) as pbar:
+                    for member in members:
+                        tar_ref.extract(member, path=words_out_dir)
+                        pbar.update(1)
         else:
             raise FileExistsError(
                 f"Extracted directory already exists at {words_out_dir}."

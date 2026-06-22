@@ -11,7 +11,11 @@ import numpy as np
 import tqdm
 from PIL import Image
 
-from lineremovernn.data.dataset import CropAsset, DownloadableDataset, ImageDataset
+from lineremovernn.data.dataset import (
+    CropAsset,
+    DownloadableDataset,
+    ImageDataset,
+)
 from lineremovernn.utils import logging
 
 logger = logging.get_logger("MathWriting")
@@ -181,7 +185,8 @@ class MathWritingDataset(DownloadableDataset, ImageDataset):
                 ctx.move_to(stroke[0, 0] + shift_x, stroke[1, 0] + shift_y)
                 for pt_idx in range(1, n_points):
                     ctx.line_to(
-                        stroke[0, pt_idx] + shift_x, stroke[1, pt_idx] + shift_y
+                        stroke[0, pt_idx] + shift_x,
+                        stroke[1, pt_idx] + shift_y,
                     )
                 ctx.stroke()
         buf = surface.get_data()
@@ -247,8 +252,18 @@ class MathWritingDataset(DownloadableDataset, ImageDataset):
 
         logger.info(f"Extracting package contents from {cls.FILENAME}...")
         if not (dataset_p / "readme.md").exists() or force:
-            with tarfile.open(archive_source) as f:
-                f.extractall(dataset_p)
+            with tarfile.open(archive_source, "r:*") as tar_ref:
+                members = tar_ref.getmembers()
+
+                with tqdm.tqdm(
+                    total=len(members),
+                    unit="file",
+                    desc="Extracting Tar Archive",
+                    leave=True,
+                ) as pbar:
+                    for member in members:
+                        tar_ref.extract(member, path=dataset_p)
+                        pbar.update(1)
 
             nested_folder = (
                 dataset_p / "mathwriting-2024-excerpt"

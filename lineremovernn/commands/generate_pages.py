@@ -64,7 +64,9 @@ class ParseDatasets(argparse.Action):
                     raise parser.error("Mathwriting Dataset isn't available")
                 datasets.append(
                     Dataset(
-                        MathWritingDataset.ID.lower(), str(MathWritingDataset.path()), p
+                        MathWritingDataset.ID.lower(),
+                        str(MathWritingDataset.path()),
+                        p,
                     )
                 )
 
@@ -87,10 +89,17 @@ class GeneratePagesCPPCommand(Command):
             help="Space-separated datasets and proportions (e.g., iam:1 mathwriting:0.3)",
         )
         parser.add_argument(
-            "-n", "--n", type=int, default=50, help="Number of page pairs to generate"
+            "-n",
+            "--n",
+            type=int,
+            default=50,
+            help="Number of page pairs to generate",
         )
         parser.add_argument(
-            "-a", "--arc", action="store_true", help="Use slightly arced ruled lines"
+            "-a",
+            "--arc",
+            action="store_true",
+            help="Use slightly arced ruled lines",
         )
         parser.add_argument(
             "-mw",
@@ -118,6 +127,12 @@ class GeneratePagesCPPCommand(Command):
             help="Export ground-truth word layout coordinates as XML files",
         )
         parser.add_argument(
+            "-d",
+            "--docs",
+            action="store_true",
+            help="Make documents like pages.",
+        )
+        parser.add_argument(
             "-w",
             "--workers",
             type=int,
@@ -135,4 +150,5 @@ class GeneratePagesCPPCommand(Command):
             max_warp=args.max_warp,
             imperfect_lines=args.imperfect_lines,
             save_xml=args.save_metadata,
+            document=args.docs,
         )

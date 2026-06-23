@@ -98,16 +98,20 @@ void add_random_perspective(const Mat &img, Mat &transformed, float max_warp,
   int new_width = std::max(1, static_cast<int>(max_x - min_x));
   int new_height = std::max(1, static_cast<int>(max_y - min_y));
 
-  float scale = static_cast<float>(target_height) / new_height;
-  int target_width = std::max(1, static_cast<int>(new_width * scale));
-
   // Shift the matrix to (0,0)
   matrix.row(0) -= min_x * matrix.row(2);
   matrix.row(1) -= min_y * matrix.row(2);
 
-  // Scale the matrix to scale the image to target height
-  matrix.row(0) *= scale;
-  matrix.row(1) *= scale;
+  float scale;
+  if (target_height > 0) {
+    scale = static_cast<float>(target_height) / new_height;
+    matrix.row(0) *= scale;
+    matrix.row(1) *= scale;
+  }
+
+  int target_width = target_height > 0
+                         ? std::max(1, static_cast<int>(new_width * scale))
+                         : new_width;
 
   Scalar border_val;
   if (img.channels() == 1) {
@@ -347,7 +351,8 @@ void generate_single_page(int idx, int max_warp, bool use_arc, bool document,
       }
 
       // Scale using the same matrix instead of mapping 2 times
-      add_random_perspective(img, warped_text, max_warp, line_height, rng);
+      add_random_perspective(img, warped_text, max_warp,
+                             document ? line_height : 0, rng);
       if (cursor.x + warped_text.cols >= w) {
         break;
       }

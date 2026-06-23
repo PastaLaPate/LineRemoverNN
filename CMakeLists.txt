@@ -41,6 +41,7 @@ nanobind_add_module(
   src/lineremovernn_ext/page_gen.cpp
   src/lineremovernn_ext/datasets/iam.cpp
   src/lineremovernn_ext/datasets/mathwriting.cpp
+  src/lineremovernn_ext/datasets/ai2d.cpp
   src/lineremovernn_ext/datasets/factory.cpp
   src/lineremovernn_ext/utils.hpp
   src/lineremovernn_ext/pugixml/pugiconfig.hpp

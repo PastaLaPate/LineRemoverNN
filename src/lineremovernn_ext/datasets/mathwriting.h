@@ -5,7 +5,8 @@
 class MathWriting : public Dataset {
 public:
   MathWriting(std::filesystem::path p_path, float p_proportion = 1.0f)
-      : Dataset("mathwriting", std::move(p_path), p_proportion) {}
+      : Dataset("mathwriting", DatasetType::HandwrittenWords, std::move(p_path),
+                p_proportion) {}
 
   cv::Mat get_image(int idx) override;
   AssetRow get_asset(int idx) override;

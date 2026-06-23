@@ -16,18 +16,27 @@ struct DatasetS {
   float proportion;
 };
 
+enum class DatasetType {
+  HandwrittenWords,
+  MathExpr,
+  Diagram,
+};
+
 class Dataset {
 public:
   std::string id;
+  enum DatasetType type;
   std::filesystem::path path;
   float proportion;
 
-  Dataset(std::string p_id, std::filesystem::path p_path)
-      : id(std::move(p_id)), path(std::move(p_path)), proportion(1.0f) {}
+  Dataset(std::string p_id, enum DatasetType type, std::filesystem::path p_path)
+      : id(std::move(p_id)), type(type), path(std::move(p_path)),
+        proportion(1.0f) {}
 
-  Dataset(std::string p_id, std::filesystem::path p_path, float p_proportion)
-      : id(std::move(p_id)), path(std::move(p_path)), proportion(p_proportion) {
-  }
+  Dataset(std::string p_id, enum DatasetType type, std::filesystem::path p_path,
+          float p_proportion)
+      : id(std::move(p_id)), type(type), path(std::move(p_path)),
+        proportion(p_proportion) {}
 
   virtual cv::Mat get_image(int idx) = 0;
   virtual AssetRow get_asset(int idx) = 0;

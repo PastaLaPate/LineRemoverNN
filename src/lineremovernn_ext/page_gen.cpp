@@ -3,6 +3,7 @@
 #include "datasets/datasets.h"
 #include "datasets/factory.h"
 #include "pugixml/pugixml.hpp"
+#include <algorithm>
 #include <atomic>
 #include <cairo/cairo.h>
 #include <cassert>
@@ -31,6 +32,37 @@ namespace bk = barkeep;
 using namespace std::chrono_literals;
 using namespace cv;
 
+enum class BlockType { Title, CatTitle, Paragraph, Schema, SkipLine };
+
+struct PageSettings {
+  bool document;
+  int w;
+  int h;
+  int line_height;
+
+  int max_warp;
+
+  // Lines
+  bool imperfect_lines;
+  bool arc;
+};
+
+struct LayoutBlock {
+  BlockType type;
+  // Common Params
+  int y_start;
+  int height; // in pixels
+  // Paragraph Param
+  int n_lines;
+  // Title/CatTitle Param
+  float scale;
+  // Schema Params
+  float schema_w_ratio;
+  int schema_x_offset;
+  // SkipLine
+  int line_skipped;
+};
+
 std::atomic<bool> shutdown_requested(false);
 
 void signal_handler(int signal) {
@@ -39,18 +71,20 @@ void signal_handler(int signal) {
   }
 }
 
-Dataset *select_dataset(const std::vector<std::unique_ptr<Dataset>> &datasets,
-                        std::mt19937 &rng) {
-  std::uniform_real_distribution<float> dist(0.0f, 1.0f);
-  float r = dist(rng);
-
-  for (const auto &d : datasets) {
-    if (r < d->proportion) {
-      return d.get();
+Dataset *get_random_dataset(
+    const std::map<DatasetType, std::vector<std::unique_ptr<Dataset>>>
+        &datasets_by_type,
+    std::initializer_list<DatasetType> types, std::mt19937 &rng) {
+  std::vector<Dataset *> candidates;
+  for (auto type : types) {
+    for (const auto &d : datasets_by_type.at(type)) {
+      candidates.push_back(d.get());
     }
-    r -= d->proportion;
   }
-  return datasets.back().get();
+  if (candidates.empty())
+    throw std::runtime_error("No datasets for requested types");
+  std::uniform_int_distribution<size_t> dist(0, candidates.size() - 1);
+  return candidates[dist(rng)];
 }
 
 void add_random_perspective(const Mat &img, Mat &transformed, float max_warp,
@@ -255,12 +289,56 @@ void draw_lines(Mat &img, bool use_arc, bool imperfect_lines,
   }
 }
 
-void generate_single_page(int idx, int max_warp, bool use_arc, bool document,
-                          bool imperfect_lines, bool save_xml,
-                          const std::vector<std::unique_ptr<Dataset>> &loaded,
-                          unsigned int seed, const fs::path &clean_dir,
-                          const fs::path &ruled_dir,
-                          const fs::path &labels_dir) {
+std::vector<LayoutBlock> generate_document_layout(PageSettings settings,
+                                                  std::mt19937 &rng) {
+  std::vector<LayoutBlock> blocks;
+}
+
+std::vector<LayoutBlock> generate_page_layout(PageSettings settings,
+                                              std::mt19937 &rng) {
+  std::vector<LayoutBlock> blocks;
+  auto rand_int = [&](int lo, int hi) {
+    return std::uniform_int_distribution<int>(lo, hi)(rng);
+  };
+  auto rand_float = [&]() {
+    return std::uniform_real_distribution<float>(0.f, 1.f)(rng);
+  };
+
+  int top_margin = rand_int(30, std::min(settings.h, 100));
+  int y = top_margin;
+
+  while (y <= settings.h) {
+    int n_lines =
+        rand_int(1, std::min(4, (int)(settings.h - y) / settings.line_height));
+    blocks.push_back({.type = BlockType::Paragraph,
+                      .y_start = y,
+                      .height = settings.line_height * n_lines,
+                      .n_lines = n_lines});
+    y += settings.line_height * n_lines;
+    if (rand_float() > 0.5 && y + settings.line_height < settings.h) {
+      int n_lines = rand_int(
+          1, std::min(2, (int)(settings.h - y) / settings.line_height));
+      blocks.push_back(
+          {.type = BlockType::SkipLine, .y_start = y, .line_skipped = n_lines});
+      y += settings.line_height * n_lines;
+    }
+  }
+
+  return blocks;
+}
+
+std::vector<LayoutBlock> generate_layout(PageSettings settings,
+                                         std::mt19937 &rng) {
+  return settings.document ? generate_document_layout(settings, rng)
+                           : generate_page_layout(settings, rng);
+}
+
+void generate_single_page(
+    int idx, int max_warp, bool use_arc, bool document, bool imperfect_lines,
+    bool save_xml,
+    std::map<DatasetType, std::vector<std::unique_ptr<Dataset>>> datasets,
+    unsigned int seed, const fs::path &clean_dir, const fs::path &ruled_dir,
+    const fs::path &labels_dir) {
 
   pugi::xml_document doc;
   pugi::xml_node page;
@@ -274,8 +352,10 @@ void generate_single_page(int idx, int max_warp, bool use_arc, bool document,
   };
 
   std::map<std::string, int> offsets;
-  for (auto const &d : loaded) {
-    offsets[d->id] = rand_int(0, d->len() - 1);
+  for (auto const &[k, sub_datasets] : datasets) {
+    for (auto const &d : sub_datasets) {
+      offsets[d->id] = rand_int(0, d->len() - 1);
+    }
   }
 
   int w;
@@ -337,7 +417,8 @@ void generate_single_page(int idx, int max_warp, bool use_arc, bool document,
     }
     int max_h = 0;
     while (cursor.x < w) {
-      auto d = select_dataset(loaded, rng);
+      auto d =
+          get_random_dataset(datasets, {DatasetType::HandwrittenWords}, rng);
       int offset = offsets[d->id] % d->len();
       AssetRow asset = d->get_asset(offset);
       Mat img = asset.image;
@@ -388,22 +469,21 @@ void generate_single_page(int idx, int max_warp, bool use_arc, bool document,
   std::vector<int> compression_params;
   compression_params.push_back(IMWRITE_JPEG_QUALITY);
   compression_params.push_back(95);
-  std::filesystem::path clean_path = clean_dir / std::format("{}.jpg", idx);
+  fs::path clean_path = clean_dir / std::format("{}.jpg", idx);
   imwrite(clean_path, clean, compression_params);
   Mat ruled = Mat::ones(h, w, CV_8UC1) *
               255; // Start with a white page for ruled version
   draw_lines(ruled, use_arc, imperfect_lines, rng);
   cv::min(ruled, clean, ruled);
-  std::filesystem::path ruled_path = ruled_dir / std::format("{}.jpg", idx);
+  fs::path ruled_path = ruled_dir / std::format("{}.jpg", idx);
   imwrite(ruled_path, ruled, compression_params);
   if (save_xml) {
     doc.save_file((labels_dir / std::format("{}.xml", idx)).c_str());
   }
 }
 
-void generate_pages(std::filesystem::path target,
-                    std::vector<DatasetS> datasets, int n, bool preload,
-                    bool use_arc, bool document, float max_warp,
+void generate_pages(fs::path target, std::vector<DatasetS> datasets, int n,
+                    bool preload, bool use_arc, bool document, float max_warp,
                     bool imperfect_lines, bool save_xml) {
   std::signal(SIGINT, signal_handler);
 
@@ -430,30 +510,41 @@ void generate_pages(std::filesystem::path target,
 
   std::cout << std::format("Constructing datasets...") << std::endl;
 
-  float total_weight = 0.0f;
+  std::map<DatasetType, std::vector<std::unique_ptr<Dataset>>> datasets_by_type;
+  std::map<DatasetType, float> total_weight_by_type;
+
+  for (auto type : {DatasetType::HandwrittenWords, DatasetType::MathExpr,
+                    DatasetType::Diagram}) {
+    datasets_by_type.emplace(type, std::vector<std::unique_ptr<Dataset>>{});
+    total_weight_by_type.emplace(type, 0.0f);
+  }
+
   for (const auto &dataset : datasets) {
-    total_weight += dataset.proportion;
+    total_weight_by_type[get_dataset_type(dataset.id)] += dataset.proportion;
   }
   // Normalize weights
   for (auto &dataset : datasets) {
-    dataset.proportion = dataset.proportion / total_weight;
+    dataset.proportion =
+        dataset.proportion / total_weight_by_type[get_dataset_type(dataset.id)];
   }
 
-  std::vector<std::unique_ptr<Dataset>> loaded;
   for (const auto &d : datasets) {
     auto dataset = make_dataset(d); // throws if unknown id
     if (!dataset->valid())
       throw std::invalid_argument("Invalid dataset path: " + d.path.string());
-    loaded.push_back(std::move(dataset));
+    datasets_by_type[dataset->type].push_back(std::move(dataset));
   }
 
   std::cout << std::format("Loading datasets...") << std::endl;
-  for (const auto &d : loaded) {
-    if (d->valid()) {
-      d->load();
-    } else {
-      throw std::invalid_argument(std::format(
-          "Dataset ID {}, path {} couldnt be loaded", d->id, d->path.string()));
+  for (const auto &[type, vec] : datasets_by_type) {
+    for (const auto &d : vec) {
+      if (d->valid()) {
+        d->load();
+      } else {
+        throw std::invalid_argument(
+            std::format("Dataset ID {}, path {} couldn't be loaded", d->id,
+                        d->path.string()));
+      }
     }
   }
 
@@ -486,8 +577,8 @@ void generate_pages(std::filesystem::path target,
         }
 
         generate_single_page(i, max_warp, use_arc, document, imperfect_lines,
-                             save_xml, loaded, 0, clean_dir, ruled_dir,
-                             labels_dir);
+                             save_xml, datasets_by_type, 0, clean_dir,
+                             ruled_dir, labels_dir);
 
         {
           std::lock_guard<std::mutex> lock(progress_mutex);

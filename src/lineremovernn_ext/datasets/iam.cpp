@@ -105,3 +105,8 @@ AssetRow IAM::get_asset(int idx) {
           .image = img,
           .transcript = word.transcript};
 }
+
+std::array<int, 2> IAM::get_size(int idx) {
+  IAMWordEntry word = this->words[idx];
+  return {word.bbox[2], word.bbox[3]};
+}

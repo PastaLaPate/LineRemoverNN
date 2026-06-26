@@ -292,6 +292,7 @@ void draw_lines(Mat &img, bool use_arc, bool imperfect_lines,
 std::vector<LayoutBlock> generate_document_layout(PageSettings settings,
                                                   std::mt19937 &rng) {
   std::vector<LayoutBlock> blocks;
+  return blocks;
 }
 
 std::vector<LayoutBlock> generate_page_layout(PageSettings settings,
@@ -333,10 +334,17 @@ std::vector<LayoutBlock> generate_layout(PageSettings settings,
                            : generate_page_layout(settings, rng);
 }
 
+Mat render_page(PageSettings settings, std::vector<LayoutBlock> layout) {
+  int w = settings.w;
+  int h = settings.h;
+  Mat clean = Mat::ones(h, w, CV_8UC1) * 255; // White page
+  return clean;
+}
+
 void generate_single_page(
     int idx, int max_warp, bool use_arc, bool document, bool imperfect_lines,
     bool save_xml,
-    std::map<DatasetType, std::vector<std::unique_ptr<Dataset>>> datasets,
+    std::map<DatasetType, std::vector<std::unique_ptr<Dataset>>> &datasets,
     unsigned int seed, const fs::path &clean_dir, const fs::path &ruled_dir,
     const fs::path &labels_dir) {
 

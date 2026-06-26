@@ -206,3 +206,101 @@ AssetRow MathWriting::get_asset(int idx) {
           .image = padded,
           .transcript = transcript};
 }
+
+std::array<int, 2> MathWriting::get_size(int idx) {
+  const auto &asset_path = this->assets[idx];
+
+  pugi::xml_document doc;
+  pugi::xml_parse_result result = doc.load_file(asset_path.c_str());
+  if (!result) {
+    std::cerr << "Failed to load asset: " << asset_path
+              << "\nError description: " << result.description() << "\n";
+    return {0, 0};
+  }
+
+  std::string asset_filename = asset_path.filename().string();
+
+  int xmin = std::numeric_limits<int>::max();
+  int ymin = std::numeric_limits<int>::max();
+  int xmax = std::numeric_limits<int>::min();
+  int ymax = std::numeric_limits<int>::min();
+  bool has_points = false;
+
+  for (pugi::xml_node node : doc.child("ink").children("trace")) {
+    std::string_view trace_text = node.text().get();
+
+    size_t comma_start = 0;
+    while (comma_start < trace_text.size()) {
+      size_t comma_end = trace_text.find(',', comma_start);
+      if (comma_end == std::string_view::npos) {
+        comma_end = trace_text.size();
+      }
+
+      std::string_view point =
+          trace_text.substr(comma_start, comma_end - comma_start);
+      comma_start = comma_end + 1;
+
+      while (!point.empty() &&
+             std::isspace(static_cast<unsigned char>(point.front())))
+        point.remove_prefix(1);
+      while (!point.empty() &&
+             std::isspace(static_cast<unsigned char>(point.back())))
+        point.remove_suffix(1);
+      if (point.empty())
+        continue;
+
+      const char *p = point.data();
+      const char *p_end = p + point.size();
+      int x = 0, y = 0, z = 0;
+
+      auto res = std::from_chars(p, p_end, x);
+      if (res.ec != std::errc{}) {
+        goto malformed;
+      }
+      p = res.ptr;
+      while (p < p_end && std::isspace(static_cast<unsigned char>(*p)))
+        p++;
+
+      res = std::from_chars(p, p_end, y);
+      if (res.ec != std::errc{}) {
+        goto malformed;
+      }
+      p = res.ptr;
+      while (p < p_end && std::isspace(static_cast<unsigned char>(*p)))
+        p++;
+
+      res = std::from_chars(p, p_end, z);
+      if (res.ec != std::errc{}) {
+        goto malformed;
+      }
+      p = res.ptr;
+
+      while (p < p_end && std::isspace(static_cast<unsigned char>(*p)))
+        p++;
+      if (p != p_end) {
+        goto malformed;
+      }
+
+      xmin = std::min(xmin, x);
+      ymin = std::min(ymin, y);
+      xmax = std::max(xmax, x);
+      ymax = std::max(ymax, y);
+      has_points = true;
+      continue;
+
+    malformed:
+      std::cout << std::format(
+          "Warning: Skipping malformed point \"{}\" in asset {}\n", point,
+          asset_filename);
+    }
+  }
+
+  if (!has_points || xmin > xmax || ymin > ymax) {
+    xmin = ymin = xmax = ymax = 0;
+  }
+
+  constexpr int margin = 6;
+  int w = std::max(1, xmax - xmin + 2 * margin);
+  int h = std::max(1, ymax - ymin + 2 * margin);
+  return {w, h};
+}

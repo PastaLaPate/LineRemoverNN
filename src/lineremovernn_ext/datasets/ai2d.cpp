@@ -1,11 +1,13 @@
 #include "ai2d.h"
 #include "datasets/datasets.h"
-#include <cstdio>
 #include <filesystem>
+#include <iostream>
 #include <opencv2/core/types.hpp>
 #include <opencv2/imgcodecs.hpp>
 #include <opencv4/opencv2/core/mat.hpp>
 #include <vector>
+#define STB_IMAGE_IMPLEMENTATION
+#include "../stb/stb_image.h"
 
 using namespace cv;
 
@@ -41,4 +43,19 @@ cv::Mat AI2D::get_image(int idx) {
 AssetRow AI2D::get_asset(int idx) {
   cv::Mat img = this->get_image(idx);
   return {.idx = idx, .dataset = "ai2d", .image = img, .transcript = ""};
+}
+
+std::array<int, 2> AI2D::get_size(int idx) {
+  const char *filename = this->images[idx].c_str();
+  int width = 0;
+  int height = 0;
+  int channels = 0;
+
+  if (stbi_info(filename, &width, &height, &channels)) {
+    return {width, height};
+  } else {
+    std::cout
+        << "Failed to parse image header. Formatter unsupported or corrupt.\n";
+    return {0, 0};
+  }
 }

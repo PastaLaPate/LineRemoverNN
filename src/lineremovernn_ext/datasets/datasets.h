@@ -40,6 +40,7 @@ public:
 
   virtual cv::Mat get_image(int idx) = 0;
   virtual AssetRow get_asset(int idx) = 0;
+  virtual std::array<int, 2> get_size(int idx) = 0;
   virtual void load() = 0; // Create internal structure mappings
   virtual bool valid() = 0;
   virtual long len() = 0;

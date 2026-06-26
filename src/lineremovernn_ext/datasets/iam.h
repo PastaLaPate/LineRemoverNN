@@ -1,4 +1,5 @@
 #include "datasets.h"
+#include <array>
 #include <filesystem>
 #include <vector>
 
@@ -18,6 +19,7 @@ public:
 
   cv::Mat get_image(int idx) override;
   AssetRow get_asset(int idx) override;
+  std::array<int, 2> get_size(int idx) override;
   void load() override;
   bool valid() override;
   long len() override;

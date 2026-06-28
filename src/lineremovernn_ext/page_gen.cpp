@@ -63,6 +63,15 @@ struct LayoutBlock {
   int line_skipped;
 };
 
+struct PageAsset {
+  int idx;
+  std::string dataset_id;
+  int w;
+  int h;
+  int x;
+  int y;
+};
+
 std::atomic<bool> shutdown_requested(false);
 
 void signal_handler(int signal) {

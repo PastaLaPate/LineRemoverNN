@@ -26,6 +26,7 @@
 #include <stdexcept>
 #include <string>
 #include <thread>
+#include <vector>
 
 namespace fs = std::filesystem;
 namespace bk = barkeep;
@@ -54,8 +55,6 @@ struct LayoutBlock {
   int height; // in pixels
   // Paragraph Param
   int n_lines;
-  // Title/CatTitle Param
-  float scale;
   // Schema Params
   float schema_w_ratio;
   int schema_x_offset;
@@ -343,10 +342,173 @@ std::vector<LayoutBlock> generate_layout(PageSettings settings,
                            : generate_page_layout(settings, rng);
 }
 
-Mat render_page(PageSettings settings, std::vector<LayoutBlock> layout) {
+std::vector<PageAsset>
+select_assets(PageSettings settings, std::vector<LayoutBlock> layout,
+              std::map<DatasetType, std::vector<std::unique_ptr<Dataset>>> const
+                  &datasets,
+              std::mt19937 &rng) {
+  auto rand_int = [&](int lo, int hi) {
+    return std::uniform_int_distribution<int>(lo, hi)(rng);
+  };
+  auto rand_float = [&]() {
+    return std::uniform_real_distribution<float>(0.f, 1.f)(rng);
+  };
+
+  std::vector<PageAsset> assets;
+
+  std::map<std::string, int> offsets;
+  for (auto const &[k, sub_datasets] : datasets) {
+    for (auto const &d : sub_datasets) {
+      offsets[d->id] = rand_int(0, d->len() - 1);
+    }
+  }
+
+  for (const auto &block : layout) {
+    switch (block.type) {
+    case BlockType::Title:
+    case BlockType::CatTitle: {
+      Dataset *dataset =
+          get_random_dataset(datasets, {DatasetType::HandwrittenWords}, rng);
+      int x = 0;
+      int max_x = settings.w - rand_int(.1 * settings.w, .5 * settings.w);
+      int retry_n = 0;
+      while (x < max_x) {
+        std::array<int, 2> s =
+            dataset->get_size((offsets[dataset->id] - 1) % dataset->len());
+        float scale = static_cast<float>(block.height) / s[1];
+
+        int scaled_w = static_cast<int>(s[0] * scale);
+        offsets[dataset->id]++;
+
+        if (scaled_w + x > max_x) {
+          if (retry_n + 1 > 3) {
+            retry_n = 0;
+            break;
+          }
+          retry_n++;
+          continue;
+        }
+
+        assets.push_back(
+            {.idx = (int)((offsets[dataset->id] - 1) % dataset->len()),
+             .dataset_id = dataset->id,
+             .w = scaled_w,
+             .h = block.height,
+             .x = x,
+             .y = block.y_start});
+        x += scaled_w;
+      }
+      break;
+    }
+    case BlockType::Paragraph: {
+      Dataset *dataset = get_random_dataset(
+          datasets, {DatasetType::HandwrittenWords, DatasetType::MathExpr},
+          rng);
+      int x = 0;
+      for (int i = 0; i < block.n_lines; i++) {
+        int retry_n = 0;
+
+        while (x < settings.w) {
+          std::array<int, 2> s =
+              dataset->get_size((offsets[dataset->id] - 1) % dataset->len());
+          float scale = static_cast<float>(block.height) / s[1];
+
+          int scaled_w = static_cast<int>(s[0] * scale);
+          offsets[dataset->id]++;
+
+          if (scaled_w + x > settings.w) {
+            if (retry_n + 1 > 3) {
+              retry_n = 0;
+              break;
+            }
+            retry_n++;
+            continue;
+          }
+
+          assets.push_back(
+              {.idx = (int)((offsets[dataset->id] - 1) % dataset->len()),
+               .dataset_id = dataset->id,
+               .w = scaled_w,
+               .h = block.height,
+               .x = x,
+               .y = block.y_start + i * settings.line_height});
+          x += scaled_w;
+        }
+        x = 0;
+      }
+      break;
+    }
+    case BlockType::Schema: {
+      Dataset *dataset =
+          get_random_dataset(datasets, {DatasetType::Diagram}, rng);
+      offsets[dataset->id]++;
+      std::array<int, 2> s =
+          dataset->get_size((offsets[dataset->id] - 1) % dataset->len());
+
+      int w = block.schema_w_ratio * s[0];
+      int h = block.schema_w_ratio * s[1];
+
+      assets.push_back({
+          .idx = (int)((offsets[dataset->id] - 1) % dataset->len()),
+          .dataset_id = dataset->id,
+          .w = w,
+          .h = h,
+          .x = block.schema_x_offset,
+          .y = block.y_start,
+      });
+      break;
+    };
+    case BlockType::SkipLine: {
+      break;
+    }
+    }
+  }
+
+  return assets;
+}
+
+Mat render_clean_page(PageSettings settings, std::vector<PageAsset> assets,
+                      std::unordered_map<std::string, std::unique_ptr<Dataset>>
+                          &datasets, // map<dataset_id, dataset*>
+                      std::mt19937 &rng) {
+  auto rand_int = [&](int lo, int hi) {
+    return std::uniform_int_distribution<int>(lo, hi)(rng);
+  };
+  auto rand_float = [&]() {
+    return std::uniform_real_distribution<float>(0.f, 1.f)(rng);
+  };
   int w = settings.w;
   int h = settings.h;
-  Mat clean = Mat::ones(h, w, CV_8UC1) * 255; // White page
+  int brightness = rand_int(220, 255);
+  Mat clean = Mat::ones(h, w, CV_8UC1) * brightness; // White page
+  Mat warped; // Temp container for warped imgs
+  for (const auto asset : assets) {
+    Dataset *d = datasets[asset.dataset_id].get();
+    AssetRow row = d->get_asset(asset.idx);
+    Mat img = row.image;
+    if (img.empty() || img.cols == 0 || img.rows == 0) {
+      std::cerr << std::format("[Warning] Dataset '{}' returned an empty "
+                               "image at offset {}. Skipping token.",
+                               d->id, asset.idx)
+                << std::endl;
+      continue;
+    }
+    if (d->type == DatasetType::HandwrittenWords) {
+      add_random_perspective(img, warped, settings.max_warp, asset.h, rng);
+    } else {
+      // It will just scale it without adding perspective
+      add_random_perspective(img, warped, 0, asset.h, rng);
+    }
+    add_random_perspective(img, warped, settings.max_warp, asset.h, rng);
+    Rect target_roi({asset.x, asset.y}, warped.size());
+    target_roi &= Rect(0, 0, w, h); // clamp to page bounds
+    if (target_roi.empty())
+      continue;
+    Mat warped_cropped =
+        warped(Rect(0, 0, target_roi.width, target_roi.height));
+    Mat roi = clean(target_roi);
+    cv::min(roi, warped_cropped, roi);
+  }
   return clean;
 }
 

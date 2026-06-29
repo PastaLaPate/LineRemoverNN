@@ -5,6 +5,8 @@ echo "Adding nanobind"
 uv add --dev nanobind scikit-build-core
 
 echo "Building..."
+export SKBUILD_CMAKE_BUILD_TYPE="Debug"
+export SKBUILD_INSTALL_STRIP="false"
 uv pip install --no-build-isolation -e .
 
 # Generate a separate compile_commands.json with stable paths using the venv python

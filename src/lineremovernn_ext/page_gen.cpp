@@ -41,7 +41,7 @@ struct PageSettings {
   int h;
   int line_height;
 
-  int max_warp;
+  float max_warp;
 
   // Lines
   bool imperfect_lines;
@@ -315,18 +315,20 @@ std::vector<LayoutBlock> generate_page_layout(PageSettings settings,
 
   int top_margin = rand_int(30, std::min(settings.h, 100));
   int y = top_margin;
+  while (y + settings.line_height <= settings.h) {
 
-  while (y <= settings.h) {
-    int n_lines =
-        rand_int(1, std::min(4, (int)(settings.h - y) / settings.line_height));
+    int remaining = (settings.h - y) / settings.line_height;
+    assert(remaining >= 1 && "rand_int would receive lo > hi");
+    int n_lines = rand_int(1, std::min(4, remaining));
     blocks.push_back({.type = BlockType::Paragraph,
                       .y_start = y,
                       .height = settings.line_height * n_lines,
                       .n_lines = n_lines});
     y += settings.line_height * n_lines;
     if (rand_float() > 0.5 && y + settings.line_height < settings.h) {
-      int n_lines = rand_int(
-          1, std::min(2, (int)(settings.h - y) / settings.line_height));
+      int remaining = (settings.h - y) / settings.line_height;
+      assert(remaining >= 1 && "rand_int would receive lo > hi");
+      int n_lines = rand_int(1, std::min(4, remaining));
       blocks.push_back(
           {.type = BlockType::SkipLine, .y_start = y, .line_skipped = n_lines});
       y += settings.line_height * n_lines;
@@ -411,7 +413,7 @@ select_assets(PageSettings settings, std::vector<LayoutBlock> layout,
         while (x < settings.w) {
           std::array<int, 2> s =
               dataset->get_size((offsets[dataset->id] - 1) % dataset->len());
-          float scale = static_cast<float>(block.height) / s[1];
+          float scale = static_cast<float>(settings.line_height) / s[1];
 
           int scaled_w = static_cast<int>(s[0] * scale);
           offsets[dataset->id]++;
@@ -429,7 +431,7 @@ select_assets(PageSettings settings, std::vector<LayoutBlock> layout,
               {.idx = (int)((offsets[dataset->id] - 1) % dataset->len()),
                .dataset_id = dataset->id,
                .w = scaled_w,
-               .h = block.height,
+               .h = settings.line_height,
                .x = x,
                .y = block.y_start + i * settings.line_height});
           x += scaled_w;
@@ -468,7 +470,7 @@ select_assets(PageSettings settings, std::vector<LayoutBlock> layout,
 }
 
 Mat render_clean_page(PageSettings settings, std::vector<PageAsset> assets,
-                      std::unordered_map<std::string, std::unique_ptr<Dataset>>
+                      std::unordered_map<std::string, Dataset *>
                           &datasets, // map<dataset_id, dataset*>
                       std::mt19937 &rng) {
   auto rand_int = [&](int lo, int hi) {
@@ -483,7 +485,7 @@ Mat render_clean_page(PageSettings settings, std::vector<PageAsset> assets,
   Mat clean = Mat::ones(h, w, CV_8UC1) * brightness; // White page
   Mat warped; // Temp container for warped imgs
   for (const auto asset : assets) {
-    Dataset *d = datasets[asset.dataset_id].get();
+    Dataset *d = datasets[asset.dataset_id];
     AssetRow row = d->get_asset(asset.idx);
     Mat img = row.image;
     if (img.empty() || img.cols == 0 || img.rows == 0) {
@@ -499,7 +501,6 @@ Mat render_clean_page(PageSettings settings, std::vector<PageAsset> assets,
       // It will just scale it without adding perspective
       add_random_perspective(img, warped, 0, asset.h, rng);
     }
-    add_random_perspective(img, warped, settings.max_warp, asset.h, rng);
     Rect target_roi({asset.x, asset.y}, warped.size());
     target_roi &= Rect(0, 0, w, h); // clamp to page bounds
     if (target_roi.empty())
@@ -510,6 +511,35 @@ Mat render_clean_page(PageSettings settings, std::vector<PageAsset> assets,
     cv::min(roi, warped_cropped, roi);
   }
   return clean;
+}
+
+void generate_page(int idx, PageSettings settings,
+                   std::map<DatasetType, std::vector<std::unique_ptr<Dataset>>>
+                       &datasets_by_type,
+                   const fs::path &clean_dir, const fs::path &ruled_dir,
+                   const fs::path &labels_dir, std::mt19937 &rng) {
+  std::vector<LayoutBlock> layout = generate_layout(settings, rng);
+  std::vector<PageAsset> assets =
+      select_assets(settings, layout, datasets_by_type, rng);
+  std::unordered_map<std::string, Dataset *> dataset_by_id;
+  for (const auto &[type, datasets] : datasets_by_type) {
+    for (auto &dataset : datasets) {
+      dataset_by_id[dataset->id] = dataset.get();
+    }
+  }
+  Mat clean = render_clean_page(settings, assets, dataset_by_id, rng);
+
+  std::vector<int> compression_params;
+  compression_params.push_back(IMWRITE_JPEG_QUALITY);
+  compression_params.push_back(95);
+  fs::path clean_path = clean_dir / std::format("{}.jpg", idx);
+  imwrite(clean_path, clean, compression_params);
+  Mat ruled = Mat::ones(settings.h, settings.w, CV_8UC1) *
+              255; // Start with a white page for ruled version
+  draw_lines(ruled, settings.arc, settings.imperfect_lines, rng);
+  cv::min(ruled, clean, ruled);
+  fs::path ruled_path = ruled_dir / std::format("{}.jpg", idx);
+  imwrite(ruled_path, ruled, compression_params);
 }
 
 void generate_single_page(
@@ -671,6 +701,9 @@ void generate_pages(fs::path target, std::vector<DatasetS> datasets, int n,
   auto rand_int = [&](int lo, int hi) {
     return std::uniform_int_distribution<int>(lo, hi)(rng);
   };
+  auto rand_float = [&]() {
+    return std::uniform_real_distribution<float>(0.f, 1.f)(rng);
+  };
 
   std::cout << std::format("Generating {} pages", n) << std::endl;
   std::cout << std::format("Creating dirs...") << std::endl;
@@ -739,12 +772,20 @@ void generate_pages(fs::path target, std::vector<DatasetS> datasets, int n,
   unsigned int num_threads = std::thread::hardware_concurrency();
   std::vector<std::jthread> workers;
 
-  std::cout << std::format("Spawning {} worker threads...", num_threads)
+  std::cout << std::format("Spawning {} worker threads... Starting generation",
+                           num_threads)
             << std::endl;
 
   auto start_time = std::chrono::high_resolution_clock::now();
   for (unsigned int t = 0; t < num_threads; ++t) {
     workers.emplace_back([&]() {
+      std::mt19937 local_rng(std::random_device{}());
+      auto rand_int = [&](int lo, int hi) {
+        return std::uniform_int_distribution<int>(lo, hi)(local_rng);
+      };
+      auto rand_float = [&]() {
+        return std::uniform_real_distribution<float>(0.f, 1.f)(local_rng);
+      };
       while (true) {
         if (shutdown_requested) {
           break;
@@ -754,15 +795,57 @@ void generate_pages(fs::path target, std::vector<DatasetS> datasets, int n,
         if (i >= n) {
           break; // No more pages left to generate
         }
+        try {
 
-        generate_single_page(i, max_warp, use_arc, document, imperfect_lines,
-                             save_xml, datasets_by_type, 0, clean_dir,
-                             ruled_dir, labels_dir);
+          int w;
+          int h;
+          int line_height;
+          if (document) {
+            float aspect_rand = rand_float();
+            float aspect;
+            h = rand_int(2500, 3000);
 
-        {
-          std::lock_guard<std::mutex> lock(progress_mutex);
-          work++;
+            // Either sqrt(2) aspect (A serie), 17:22 (American letter), or
+            // 17:28 (American legal)
+            if (aspect_rand < 1.0f / 3.0f) {
+              aspect = 1.0f / std::sqrt(2.0f);
+            } else if (aspect_rand < 2.0f / 3.0f && aspect_rand >= 1.0f / 3) {
+              aspect = 17.f / 22.f;
+            } else if (aspect_rand >= 2.0f / 3.0f) {
+              aspect = 17.f / 28.f;
+            }
+            w = static_cast<int>(std::round(h * aspect));
+            line_height = rand_int(45, 65);
+          } else {
+            w = rand_int(500, 1600);
+            h = rand_int(800, 2000);
+            line_height = rand_int(50, 190);
+          }
+
+          PageSettings settings = {.document = document,
+                                   .w = w,
+                                   .h = h,
+                                   .line_height = line_height,
+                                   .max_warp = max_warp,
+                                   .imperfect_lines = imperfect_lines,
+                                   .arc = use_arc};
+          generate_page(i, settings, datasets_by_type, clean_dir, ruled_dir,
+                        labels_dir, local_rng);
+          {
+            std::lock_guard<std::mutex> lock(progress_mutex);
+            work++;
+          }
+        } catch (const std::exception &e) {
+          std::cerr << std::format("[Worker] Exception on page {}: {}\n", i,
+                                   e.what());
+        } catch (...) {
+          std::cerr << std::format("[Worker] Unknown exception on page {}\n",
+                                   i);
         }
+
+        /*generate_single_page(i, max_warp, use_arc, document, imperfect_lines,
+                             save_xml, datasets_by_type, 0, clean_dir,
+                             ruled_dir, labels_dir);*/
       }
     });
   }

@@ -22,7 +22,6 @@ void IAM::load() {
   std::string line;
 
   auto start_time = std::chrono::high_resolution_clock::now();
-  size_t parsed_count = 0;
 
   while (std::getline(WordsIndex, line)) {
     if (line.starts_with("#"))
@@ -49,16 +48,14 @@ void IAM::load() {
                 parse_int(tokens[5]), parse_int(tokens[6])}},
          .transcript{tokens[8]},
          .gray_scale = static_cast<uint8_t>(parse_int(tokens[2]))});
-    parsed_count++;
   }
 
   WordsIndex.close();
   auto end_time = std::chrono::high_resolution_clock::now();
 
-  // 3. Calculate durations
   std::chrono::duration<double, std::milli> duration_ms = end_time - start_time;
 
-  // 4. Print the statistics
+  int parsed_count = this->words.size();
   if (parsed_count > 0) {
     double avg_time = duration_ms.count() / parsed_count;
     std::cout << std::format(

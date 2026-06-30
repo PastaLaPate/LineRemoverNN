@@ -17,11 +17,9 @@
 using namespace cv;
 
 void MathWriting::load() {
-  // std::ifstream WordsIndex(this->path / "words.txt");
   std::string line;
 
   auto start_time = std::chrono::high_resolution_clock::now();
-  size_t parsed_count = 0;
   std::vector<std::filesystem::path> target_dirs = {this->path / "train",
                                                     this->path / "synthetic"};
   for (const auto &dir : target_dirs) {
@@ -29,22 +27,18 @@ void MathWriting::load() {
          std::filesystem::recursive_directory_iterator(dir)) {
       if (entry.is_regular_file() && entry.path().extension() == ".inkml") {
         this->assets.push_back(entry.path());
-        parsed_count++;
       }
     }
   }
-  // WordsIndex.close();
   auto end_time = std::chrono::high_resolution_clock::now();
 
-  // 3. Calculate durations
   std::chrono::duration<double, std::milli> duration_ms = end_time - start_time;
 
-  // 4. Print the statistics
-  if (parsed_count > 0) {
-    double avg_time = duration_ms.count() / parsed_count;
+  if (this->assets.size() > 0) {
+    double avg_time = duration_ms.count() / this->assets.size();
     std::cout << std::format(
         "[MathWriting::load] Loaded {} assets in {:.2f} ms ({:.4f} ms/asset)\n",
-        parsed_count, duration_ms.count(), avg_time);
+        this->assets.size(), duration_ms.count(), avg_time);
   } else {
     std::cout << "[MathWriting::load] No assets were loaded.\n";
   }
@@ -99,8 +93,8 @@ AssetRow MathWriting::get_asset(int idx) {
       std::vector<std::string_view> coords = split(point, ' ');
       if (coords.size() != 3) {
         std::cout << std::format(
-            "Warning: Skipping malformed point \"{}\" in asset {}\n", point,
-            asset_path.filename().string());
+            "Warning: Skipping malformed point \"{}\" in asset {}, size: {}\n",
+            point, asset_path.filename().string(), coords.size());
         continue;
       }
       int x = parse_int(coords[0]);
@@ -145,7 +139,7 @@ AssetRow MathWriting::get_asset(int idx) {
   if (h * scale < min_h) {
     scale = static_cast<float>(min_h) / h;
   }
-  float target_stroke_min = 2.0f, target_stroke_max = 4.5f;
+  float target_stroke_min = 4.0f, target_stroke_max = 7.0f;
   int stroke_width =
       rand_int(std::max(1, static_cast<int>(target_stroke_min / scale)),
                std::max(2, static_cast<int>(target_stroke_max / scale)));
@@ -220,10 +214,10 @@ std::array<int, 2> MathWriting::get_size(int idx) {
 
   std::string asset_filename = asset_path.filename().string();
 
-  int xmin = std::numeric_limits<int>::max();
-  int ymin = std::numeric_limits<int>::max();
-  int xmax = std::numeric_limits<int>::min();
-  int ymax = std::numeric_limits<int>::min();
+  float xmin = std::numeric_limits<float>::max();
+  float ymin = std::numeric_limits<float>::max();
+  float xmax = std::numeric_limits<float>::min();
+  float ymax = std::numeric_limits<float>::min();
   bool has_points = false;
 
   for (pugi::xml_node node : doc.child("ink").children("trace")) {
@@ -251,9 +245,9 @@ std::array<int, 2> MathWriting::get_size(int idx) {
 
       const char *p = point.data();
       const char *p_end = p + point.size();
-      int x = 0, y = 0, z = 0;
+      float x = 0, y = 0, z = 0;
 
-      auto res = std::from_chars(p, p_end, x);
+      auto res = std::from_chars(p, p_end, x, std::chars_format::general);
       if (res.ec != std::errc{}) {
         goto malformed;
       }
@@ -261,7 +255,7 @@ std::array<int, 2> MathWriting::get_size(int idx) {
       while (p < p_end && std::isspace(static_cast<unsigned char>(*p)))
         p++;
 
-      res = std::from_chars(p, p_end, y);
+      res = std::from_chars(p, p_end, y, std::chars_format::general);
       if (res.ec != std::errc{}) {
         goto malformed;
       }
@@ -269,7 +263,7 @@ std::array<int, 2> MathWriting::get_size(int idx) {
       while (p < p_end && std::isspace(static_cast<unsigned char>(*p)))
         p++;
 
-      res = std::from_chars(p, p_end, z);
+      res = std::from_chars(p, p_end, z, std::chars_format::general);
       if (res.ec != std::errc{}) {
         goto malformed;
       }
@@ -300,7 +294,7 @@ std::array<int, 2> MathWriting::get_size(int idx) {
   }
 
   constexpr int margin = 6;
-  int w = std::max(1, xmax - xmin + 2 * margin);
-  int h = std::max(1, ymax - ymin + 2 * margin);
+  int w = std::max(1.0f, xmax - xmin + 2 * margin);
+  int h = std::max(1.0f, ymax - ymin + 2 * margin);
   return {w, h};
 }

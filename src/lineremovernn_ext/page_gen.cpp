@@ -22,6 +22,7 @@
 #include <opencv2/imgcodecs.hpp>
 #include <opencv2/imgproc.hpp>
 #include <opencv2/opencv.hpp>
+#include <ostream>
 #include <random>
 #include <stdexcept>
 #include <string>
@@ -56,8 +57,7 @@ struct LayoutBlock {
   // Paragraph Param
   int n_lines;
   // Schema Params
-  float schema_w_ratio;
-  int schema_x_offset;
+  float schema_x_offset; // 0.0 = left, .5 = center, 1.0 = right
   // SkipLine
   int line_skipped;
 };
@@ -300,6 +300,106 @@ void draw_lines(Mat &img, bool use_arc, bool imperfect_lines,
 std::vector<LayoutBlock> generate_document_layout(PageSettings settings,
                                                   std::mt19937 &rng) {
   std::vector<LayoutBlock> blocks;
+
+  auto rand_int = [&](int lo, int hi) {
+    return std::uniform_int_distribution<int>(lo, hi)(rng);
+  };
+
+  auto rand_float = [&](float lo, float hi) {
+    return std::uniform_real_distribution<float>(lo, hi)(rng);
+  };
+
+  int top_margin = rand_int(30, std::min(settings.h, 100));
+  int y = top_margin;
+
+  if (rand_float(0.f, 1.f) < 0.66f) {
+    float title_scale = rand_float(1.2f, 1.5f);
+    int title_h = static_cast<int>(settings.line_height * title_scale);
+
+    blocks.push_back({.type = BlockType::Title,
+                      .y_start = y,
+                      .height = title_h,
+                      .n_lines = 1});
+    y += title_h;
+
+    if (y + settings.line_height * 2 <= settings.h) {
+      blocks.push_back(
+          {.type = BlockType::SkipLine, .y_start = y, .line_skipped = 2});
+      y += settings.line_height * 2;
+    }
+  }
+
+  BlockType last_type = BlockType::SkipLine;
+
+  while (y + settings.line_height <= settings.h) {
+
+    BlockType current_type;
+    while (true) {
+      float choice = rand_float(0.f, 1.f);
+      if (choice < 0.1f) {
+        if (last_type != BlockType::CatTitle) {
+          current_type = BlockType::CatTitle;
+          break;
+        }
+      } else if (choice < 0.8f) { // 0.1 + 0.7 = 0.8
+        current_type = BlockType::Paragraph;
+        break;
+      } else { // Remaining 0.2
+        current_type = BlockType::Schema;
+        break;
+      }
+    }
+
+    if (current_type == BlockType::CatTitle) {
+      float cat_scale = rand_float(1.1f, 1.3f);
+      int cat_h = static_cast<int>(settings.line_height * cat_scale);
+
+      if (y + cat_h > settings.h)
+        break;
+
+      blocks.push_back({.type = BlockType::CatTitle,
+                        .y_start = y,
+                        .height = cat_h,
+                        .n_lines = 1});
+      y += cat_h;
+      last_type = BlockType::CatTitle;
+
+    } else if (current_type == BlockType::Paragraph) {
+      int remaining_lines = (settings.h - y) / settings.line_height;
+      if (remaining_lines < 1)
+        break;
+
+      int min_lines = std::min(3, remaining_lines);
+      int max_lines = std::min(8, remaining_lines);
+      int n_lines = rand_int(min_lines, max_lines);
+
+      blocks.push_back({.type = BlockType::Paragraph,
+                        .y_start = y,
+                        .height = settings.line_height * n_lines,
+                        .n_lines = n_lines});
+      y += settings.line_height * n_lines;
+      last_type = BlockType::Paragraph;
+
+    } else if (current_type == BlockType::Schema) {
+      float schema_ratio = rand_float(0.6f, 0.9f);
+      float x_offset = rand_float(0, 1);
+      int height = rand_int(190, 250);
+
+      blocks.push_back({.type = BlockType::Schema,
+                        .y_start = y,
+                        .height = height,
+                        .schema_x_offset = x_offset});
+      y += height;
+      last_type = BlockType::Schema;
+    }
+
+    if (y + settings.line_height <= settings.h) {
+      blocks.push_back(
+          {.type = BlockType::SkipLine, .y_start = y, .line_skipped = 1});
+      y += settings.line_height;
+    }
+  }
+
   return blocks;
 }
 
@@ -324,7 +424,7 @@ std::vector<LayoutBlock> generate_page_layout(PageSettings settings,
                       .y_start = y,
                       .height = settings.line_height * n_lines,
                       .n_lines = n_lines});
-    y += settings.line_height * n_lines;
+    y += settings.line_height * n_lines + rand_int(20, 40);
     if (rand_float() > 0.5 && y + settings.line_height < settings.h) {
       int remaining = (settings.h - y) / settings.line_height;
       assert(remaining >= 1 && "rand_int would receive lo > hi");
@@ -375,12 +475,12 @@ select_assets(PageSettings settings, std::vector<LayoutBlock> layout,
       int max_x = settings.w - rand_int(.1 * settings.w, .5 * settings.w);
       int retry_n = 0;
       while (x < max_x) {
+        offsets[dataset->id]++;
         std::array<int, 2> s =
             dataset->get_size((offsets[dataset->id] - 1) % dataset->len());
         float scale = static_cast<float>(block.height) / s[1];
 
         int scaled_w = static_cast<int>(s[0] * scale);
-        offsets[dataset->id]++;
 
         if (scaled_w + x > max_x) {
           if (retry_n + 1 > 3) {
@@ -398,25 +498,25 @@ select_assets(PageSettings settings, std::vector<LayoutBlock> layout,
              .h = block.height,
              .x = x,
              .y = block.y_start});
-        x += scaled_w;
+        x += scaled_w + rand_int(10, 20);
       }
       break;
     }
     case BlockType::Paragraph: {
-      Dataset *dataset = get_random_dataset(
-          datasets, {DatasetType::HandwrittenWords, DatasetType::MathExpr},
-          rng);
       int x = 0;
       for (int i = 0; i < block.n_lines; i++) {
         int retry_n = 0;
 
         while (x < settings.w) {
+          Dataset *dataset = get_random_dataset(
+              datasets, {DatasetType::HandwrittenWords, DatasetType::MathExpr},
+              rng);
+          offsets[dataset->id]++;
           std::array<int, 2> s =
               dataset->get_size((offsets[dataset->id] - 1) % dataset->len());
           float scale = static_cast<float>(settings.line_height) / s[1];
 
           int scaled_w = static_cast<int>(s[0] * scale);
-          offsets[dataset->id]++;
 
           if (scaled_w + x > settings.w) {
             if (retry_n + 1 > 3) {
@@ -434,9 +534,9 @@ select_assets(PageSettings settings, std::vector<LayoutBlock> layout,
                .h = settings.line_height,
                .x = x,
                .y = block.y_start + i * settings.line_height});
-          x += scaled_w;
+          x += scaled_w + rand_int(10, 20);
         }
-        x = 0;
+        x = rand_int(10, 20);
       }
       break;
     }
@@ -446,16 +546,19 @@ select_assets(PageSettings settings, std::vector<LayoutBlock> layout,
       offsets[dataset->id]++;
       std::array<int, 2> s =
           dataset->get_size((offsets[dataset->id] - 1) % dataset->len());
-
-      int w = block.schema_w_ratio * s[0];
-      int h = block.schema_w_ratio * s[1];
+      float ratio = static_cast<float>(block.height) / static_cast<float>(s[1]);
+      if (ratio <= 0.0f)
+        ratio = 0.1f;
+      int w = ratio * s[0];
+      int h = ratio * s[1];
+      int offset = (settings.w - w) * block.schema_x_offset;
 
       assets.push_back({
           .idx = (int)((offsets[dataset->id] - 1) % dataset->len()),
           .dataset_id = dataset->id,
           .w = w,
           .h = h,
-          .x = block.schema_x_offset,
+          .x = offset,
           .y = block.y_start,
       });
       break;
@@ -745,6 +848,8 @@ void generate_pages(fs::path target, std::vector<DatasetS> datasets, int n,
     if (!dataset->valid())
       throw std::invalid_argument("Invalid dataset path: " + d.path.string());
     datasets_by_type[dataset->type].push_back(std::move(dataset));
+    std::cout << std::format("Found dataset {} at {}", d.id, d.path.string())
+              << std::endl;
   }
 
   std::cout << std::format("Loading datasets...") << std::endl;

@@ -1,6 +1,7 @@
 #include "ai2d.h"
 #include "datasets/datasets.h"
 #include <filesystem>
+#include <format>
 #include <iostream>
 #include <opencv2/core/types.hpp>
 #include <opencv2/imgcodecs.hpp>
@@ -12,16 +13,28 @@
 using namespace cv;
 
 void AI2D::load() {
-  std::filesystem::path images_path = this->path / "ai2d" / "images";
+  auto start_time = std::chrono::high_resolution_clock::now();
+  std::filesystem::path images_path = this->path / "ai2d" / "ai2d" / "images";
   std::filesystem::directory_iterator dir_iter =
       std::filesystem::directory_iterator(images_path);
   for (const auto &entry : dir_iter) {
     this->images.push_back(entry.path());
   }
+  auto end_time = std::chrono::high_resolution_clock::now();
+
+  std::chrono::duration<double, std::milli> duration_ms = end_time - start_time;
+  if (this->images.size() > 0) {
+    double avg_time = duration_ms.count() / this->images.size();
+    std::cout << std::format(
+        "[AI2D::load] Loaded {} diagrams in {:.2f} ms ({:.4f} ms/diagram)\n",
+        this->images.size(), duration_ms.count(), avg_time);
+  } else {
+    std::cout << "[AI2D::load] No diagrams were loaded.\n";
+  }
 }
 
 bool AI2D::valid() {
-  std::filesystem::path main_path = this->path / "ai2d";
+  std::filesystem::path main_path = this->path / "ai2d" / "ai2d";
   std::filesystem::path images_path = main_path / "images";
   return std::filesystem::exists(main_path) &&
          std::filesystem::is_directory(main_path) &&

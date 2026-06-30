@@ -4,6 +4,7 @@ from typing import Sequence
 
 from lineremovernn._lineremovernn_ext import Dataset, generate_pages
 from lineremovernn.commands.command import Command
+from lineremovernn.data.ai2d import AI2DDataset
 from lineremovernn.data.iam import IAMDataset
 from lineremovernn.data.mathwriting import MathWritingDataset
 from lineremovernn.data.pages import PagesDataset
@@ -15,7 +16,11 @@ logger = logging.get_logger("PageGenerator")
 
 
 class ParseDatasets(argparse.Action):
-    ALLOWED_DATASETS = {IAMDataset.ID.lower(), MathWritingDataset.ID.lower()}
+    ALLOWED_DATASETS = {
+        IAMDataset.ID.lower(),
+        MathWritingDataset.ID.lower(),
+        AI2DDataset.ID.lower(),
+    }
 
     def __call__(
         self,
@@ -68,6 +73,12 @@ class ParseDatasets(argparse.Action):
                         str(MathWritingDataset.path()),
                         p,
                     )
+                )
+            elif dataset_id == AI2DDataset.ID.lower():
+                if not AI2DDataset.available():
+                    raise parser.error("AI2D Dataset isn't available")
+                datasets.append(
+                    Dataset(AI2DDataset.ID.lower(), str(AI2DDataset.path()), p)
                 )
 
         setattr(namespace, self.dest, datasets)

@@ -86,14 +86,17 @@ Dataset *get_random_dataset(
         &datasets_by_type,
     std::initializer_list<DatasetType> types, std::mt19937 &rng) {
   std::vector<Dataset *> candidates;
+  std::vector<float> weights;
   for (auto type : types) {
     for (const auto &d : datasets_by_type.at(type)) {
       candidates.push_back(d.get());
+      weights.push_back(d->proportion);
     }
   }
   if (candidates.empty())
     throw std::runtime_error("No datasets for requested types");
-  std::uniform_int_distribution<size_t> dist(0, candidates.size() - 1);
+
+  std::discrete_distribution<size_t> dist(weights.begin(), weights.end());
   return candidates[dist(rng)];
 }
 
@@ -602,11 +605,25 @@ Mat render_clean_page(PageSettings settings, std::vector<LayoutBlock> &layout,
   int brightness = rand_int(220, 255);
   Mat clean = Mat::ones(h, w, CV_8UC1) * brightness; // White page
   Mat warped; // Temp container for warped imgs
+
+  double load_total_ms = 0.0, warp_total_ms = 0.0, copy_total_ms = 0.0;
+  int asset_count = 0;
+
+  struct DatasetStat {
+    double total_ms = 0.0;
+    int count = 0;
+  };
+  std::unordered_map<std::string, DatasetStat> load_stats_by_dataset;
+
   for (auto &block : layout) {
     for (auto &lines : block.assets) {
       for (auto &asset : lines) {
         Dataset *d = datasets[asset.dataset_id];
+
+        auto t0 = std::chrono::high_resolution_clock::now();
         AssetRow row = d->get_asset(asset.idx);
+        auto t1 = std::chrono::high_resolution_clock::now();
+
         Mat img = row.image;
         if (img.empty() || img.cols == 0 || img.rows == 0) {
           std::cerr << std::format("[Warning] Dataset '{}' returned an empty "
@@ -616,12 +633,15 @@ Mat render_clean_page(PageSettings settings, std::vector<LayoutBlock> &layout,
           continue;
         }
         asset.transcript = row.transcript;
+
         if (d->type == DatasetType::HandwrittenWords) {
           add_random_perspective(img, warped, settings.max_warp, asset.h, rng);
         } else {
           // It will just scale it without adding perspective
           add_random_perspective(img, warped, 0, asset.h, rng);
         }
+        auto t2 = std::chrono::high_resolution_clock::now();
+
         Rect target_roi({asset.x, asset.y}, warped.size());
         target_roi &= Rect(0, 0, w, h); // clamp to page bounds
         if (target_roi.empty())
@@ -630,9 +650,43 @@ Mat render_clean_page(PageSettings settings, std::vector<LayoutBlock> &layout,
             warped(Rect(0, 0, target_roi.width, target_roi.height));
         Mat roi = clean(target_roi);
         cv::min(roi, warped_cropped, roi);
+        auto t3 = std::chrono::high_resolution_clock::now();
+
+        double load_ms =
+            std::chrono::duration<double, std::milli>(t1 - t0).count();
+        load_total_ms += load_ms;
+        warp_total_ms +=
+            std::chrono::duration<double, std::milli>(t2 - t1).count();
+        copy_total_ms +=
+            std::chrono::duration<double, std::milli>(t3 - t2).count();
+        asset_count++;
+
+        auto &stat = load_stats_by_dataset[asset.dataset_id];
+        stat.total_ms += load_ms;
+        stat.count++;
       }
     }
   }
+
+  if (asset_count > 0) {
+    static std::mutex log_mutex;
+    std::lock_guard<std::mutex> lk(log_mutex);
+
+    std::cout << std::format(
+        "[render_clean_page] {} assets — avg load: {:.4f} ms, avg warp: {:.4f} "
+        "ms, avg copy: {:.4f} ms "
+        "(totals: load {:.2f} ms, warp {:.2f} ms, copy {:.2f} ms)\n",
+        asset_count, load_total_ms / asset_count, warp_total_ms / asset_count,
+        copy_total_ms / asset_count, load_total_ms, warp_total_ms,
+        copy_total_ms);
+
+    for (const auto &[dataset_id, stat] : load_stats_by_dataset) {
+      std::cout << std::format(
+          "    dataset '{}': {} loads, avg {:.4f} ms, total {:.2f} ms\n",
+          dataset_id, stat.count, stat.total_ms / stat.count, stat.total_ms);
+    }
+  }
+
   return clean;
 }
 
@@ -720,27 +774,41 @@ void generate_page(int idx, PageSettings settings,
                        &datasets_by_type,
                    const fs::path &clean_dir, const fs::path &ruled_dir,
                    const fs::path &labels_dir, std::mt19937 &rng) {
+
   std::vector<LayoutBlock> layout = generate_layout(settings, rng);
+
   select_assets(settings, layout, datasets_by_type, rng);
+  auto start_time = std::chrono::high_resolution_clock::now();
+
   std::unordered_map<std::string, Dataset *> dataset_by_id;
   for (const auto &[type, datasets] : datasets_by_type) {
     for (auto &dataset : datasets) {
       dataset_by_id[dataset->id] = dataset.get();
     }
   }
+
   Mat clean = render_clean_page(settings, layout, dataset_by_id, rng);
+
+  auto end_time = std::chrono::high_resolution_clock::now();
+  std::chrono::duration<double, std::milli> duration_ms = end_time - start_time;
+  std::cout << "Render in " << duration_ms.count() << " ms" << std::endl;
 
   std::vector<int> compression_params;
   compression_params.push_back(IMWRITE_JPEG_QUALITY);
   compression_params.push_back(95);
+
   fs::path clean_path = clean_dir / std::format("{}.jpg", idx);
   imwrite(clean_path, clean, compression_params);
+
   Mat ruled = Mat::ones(settings.h, settings.w, CV_8UC1) *
               255; // Start with a white page for ruled version
   draw_lines(ruled, settings.arc, settings.imperfect_lines, rng);
+
   cv::min(ruled, clean, ruled);
+
   fs::path ruled_path = ruled_dir / std::format("{}.jpg", idx);
   imwrite(ruled_path, ruled, compression_params);
+
   if (settings.save_labels) {
     pugi::xml_document doc = serialize_xml(idx, settings, layout);
     fs::path xml_path = labels_dir / std::format("{}.xml", idx);

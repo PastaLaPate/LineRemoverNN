@@ -17,12 +17,13 @@
 using namespace cv;
 
 void MathWriting::load() {
-  std::string line;
-
   auto start_time = std::chrono::high_resolution_clock::now();
+
   std::vector<std::filesystem::path> target_dirs = {this->path / "train",
                                                     this->path / "synthetic"};
   for (const auto &dir : target_dirs) {
+    if (!std::filesystem::exists(dir))
+      continue;
     for (const auto &entry :
          std::filesystem::recursive_directory_iterator(dir)) {
       if (entry.is_regular_file() && entry.path().extension() == ".inkml") {
@@ -30,15 +31,77 @@ void MathWriting::load() {
       }
     }
   }
-  auto end_time = std::chrono::high_resolution_clock::now();
 
+  this->parsed_cache.resize(this->assets.size());
+
+  // parse all XML data
+  for (size_t i = 0; i < this->assets.size(); ++i) {
+    const auto &asset_path = this->assets[i];
+    ParsedAsset &parsed = this->parsed_cache[i];
+
+    pugi::xml_document doc;
+    pugi::xml_parse_result result = doc.load_file(asset_path.c_str());
+    if (!result) {
+      std::cerr << "Failed to load asset: " << asset_path
+                << "\nError description: " << result.description() << "\n";
+      continue;
+    }
+
+    // cache transcript
+    for (pugi::xml_node node : doc.child("ink").children("annotation")) {
+      if (strcmp(node.attribute("type").value(), "normalizedLabel") == 0) {
+        parsed.transcript = node.text().get();
+        break;
+      }
+    }
+
+    // cache xmin, ymin, xmax, ymax and strokes
+    parsed.xmin = std::numeric_limits<int>::max();
+    parsed.ymin = std::numeric_limits<int>::max();
+    parsed.xmax = std::numeric_limits<int>::min();
+    parsed.ymax = std::numeric_limits<int>::min();
+
+    for (pugi::xml_node node : doc.child("ink").children("trace")) {
+      std::string mutable_text = node.text().get();
+      std::vector<std::string_view> points =
+          split(strstrip(mutable_text.data()), ',');
+      std::vector<cv::Point> sub_strokes;
+
+      for (const auto &point : points) {
+        std::vector<std::string_view> coords = split(point, ' ');
+        if (coords.size() != 3) {
+          continue;
+        }
+        int x = parse_int(coords[0]);
+        int y = parse_int(coords[1]);
+        sub_strokes.emplace_back(x, y);
+
+        parsed.xmin = std::min(parsed.xmin, x);
+        parsed.ymin = std::min(parsed.ymin, y);
+        parsed.xmax = std::max(parsed.xmax, x);
+        parsed.ymax = std::max(parsed.ymax, y);
+      }
+      if (!sub_strokes.empty()) {
+        parsed.strokes.push_back(std::move(sub_strokes));
+      }
+    }
+
+    // Handle edge fallback layout edge cases cleanly
+    if (parsed.strokes.empty() || parsed.xmin > parsed.xmax ||
+        parsed.ymin > parsed.ymax) {
+      parsed.xmin = parsed.ymin = parsed.xmax = parsed.ymax = 0;
+    }
+  }
+
+  auto end_time = std::chrono::high_resolution_clock::now();
   std::chrono::duration<double, std::milli> duration_ms = end_time - start_time;
 
-  if (this->assets.size() > 0) {
+  if (!this->assets.empty()) {
     double avg_time = duration_ms.count() / this->assets.size();
-    std::cout << std::format(
-        "[MathWriting::load] Loaded {} assets in {:.2f} ms ({:.4f} ms/asset)\n",
-        this->assets.size(), duration_ms.count(), avg_time);
+    std::cout << std::format("[MathWriting::load] Loaded and parsed {} assets "
+                             "in {:.2f} ms ({:.4f} ms/asset)\n",
+                             this->assets.size(), duration_ms.count(),
+                             avg_time);
   } else {
     std::cout << "[MathWriting::load] No assets were loaded.\n";
   }
@@ -56,79 +119,18 @@ bool MathWriting::valid() {
 long MathWriting::len() { return this->assets.size(); }
 
 cv::Mat MathWriting::get_image(int idx) { return this->get_asset(idx).image; }
-
 AssetRow MathWriting::get_asset(int idx) {
-
   static thread_local std::mt19937 rng(std::random_device{}());
   auto rand_int = [&](int lo, int hi) {
     return std::uniform_int_distribution<int>(lo, hi)(rng);
   };
-  std::filesystem::path asset_path = this->assets[idx];
-  pugi::xml_document doc;
-  pugi::xml_parse_result result = doc.load_file(asset_path.c_str());
-  if (!result) {
-    std::cerr << "Failed to load asset: " << asset_path
-              << "\nError description: " << result.description() << "\n";
-    return {.idx = idx,
-            .dataset = "mathwriting",
-            .image = cv::Mat(),
-            .transcript = ""};
-  }
-  // Parse the XML and extract strokes data
-  std::string transcript = "";
-  for (pugi::xml_node node : doc.child("ink").children("annotation")) {
-    if (strcmp(node.attribute("type").value(), "normalizedLabel") == 0) {
-      transcript = node.text().get();
-      break;
-    }
-  }
 
-  std::vector<std::vector<cv::Point>> strokes;
-  for (pugi::xml_node node : doc.child("ink").children("trace")) {
-    std::string mutable_text = node.text().get();
-    std::vector<std::string_view> points =
-        split(strstrip(mutable_text.data()), ',');
-    std::vector<cv::Point> sub_strokes;
-    for (auto &point : points) {
-      std::vector<std::string_view> coords = split(point, ' ');
-      if (coords.size() != 3) {
-        std::cout << std::format(
-            "Warning: Skipping malformed point \"{}\" in asset {}, size: {}\n",
-            point, asset_path.filename().string(), coords.size());
-        continue;
-      }
-      int x = parse_int(coords[0]);
-      int y = parse_int(coords[1]);
-      sub_strokes.emplace_back(x, y);
-    }
-    if (!sub_strokes.empty()) {
-      strokes.push_back(std::move(sub_strokes));
-    }
-  }
-
-  // Compute extreme stroke limits for spatial box tracking
-  int xmin = std::numeric_limits<int>::max();
-  int ymin = std::numeric_limits<int>::max();
-  int xmax = std::numeric_limits<int>::min();
-  int ymax = std::numeric_limits<int>::min();
-
-  for (const auto &stroke : strokes) {
-    for (const auto &pt : stroke) {
-      xmin = std::min(xmin, pt.x);
-      ymin = std::min(ymin, pt.y);
-      xmax = std::max(xmax, pt.x);
-      ymax = std::max(ymax, pt.y);
-    }
-  }
-
-  // Fallback case if for some reason no valid points were found
-  if (strokes.empty() || xmin > xmax || ymin > ymax) {
-    xmin = ymin = xmax = ymax = 0;
-  }
+  // get directly from cache
+  const auto &parsed = this->parsed_cache[idx];
 
   int margin = 6;
-  int w = std::max(1, xmax - xmin + 2 * margin);
-  int h = std::max(1, ymax - ymin + 2 * margin);
+  int w = std::max(1, parsed.xmax - parsed.xmin + 2 * margin);
+  int h = std::max(1, parsed.ymax - parsed.ymin + 2 * margin);
   int target = 256;
   int min_h = 128;
   if (h / w > 2) {
@@ -146,8 +148,8 @@ AssetRow MathWriting::get_asset(int idx) {
 
   int pen_darkness = rand_int(230, 255);
 
-  int shift_x = margin - xmin;
-  int shift_y = margin - ymin;
+  int shift_x = margin - parsed.xmin;
+  int shift_y = margin - parsed.ymin;
 
   auto surface = cairo_image_surface_create(CAIRO_FORMAT_A8, w, h);
   auto context = cairo_create(surface);
@@ -161,7 +163,7 @@ AssetRow MathWriting::get_asset(int idx) {
   cairo_set_line_join(context, CAIRO_LINE_JOIN_ROUND);
   cairo_set_operator(context, CAIRO_OPERATOR_SOURCE);
 
-  for (const auto &stroke : strokes) {
+  for (const auto &stroke : parsed.strokes) {
     int n_points = stroke.size();
     if (n_points == 1) {
       cairo_arc(context, stroke[0].x + shift_x, stroke[0].y + shift_y,
@@ -198,103 +200,14 @@ AssetRow MathWriting::get_asset(int idx) {
   return {.idx = idx,
           .dataset = "mathwriting",
           .image = padded,
-          .transcript = transcript};
+          .transcript = parsed.transcript};
 }
 
 std::array<int, 2> MathWriting::get_size(int idx) {
-  const auto &asset_path = this->assets[idx];
-
-  pugi::xml_document doc;
-  pugi::xml_parse_result result = doc.load_file(asset_path.c_str());
-  if (!result) {
-    std::cerr << "Failed to load asset: " << asset_path
-              << "\nError description: " << result.description() << "\n";
-    return {0, 0};
-  }
-
-  std::string asset_filename = asset_path.filename().string();
-
-  float xmin = std::numeric_limits<float>::max();
-  float ymin = std::numeric_limits<float>::max();
-  float xmax = std::numeric_limits<float>::min();
-  float ymax = std::numeric_limits<float>::min();
-  bool has_points = false;
-
-  for (pugi::xml_node node : doc.child("ink").children("trace")) {
-    std::string_view trace_text = node.text().get();
-
-    size_t comma_start = 0;
-    while (comma_start < trace_text.size()) {
-      size_t comma_end = trace_text.find(',', comma_start);
-      if (comma_end == std::string_view::npos) {
-        comma_end = trace_text.size();
-      }
-
-      std::string_view point =
-          trace_text.substr(comma_start, comma_end - comma_start);
-      comma_start = comma_end + 1;
-
-      while (!point.empty() &&
-             std::isspace(static_cast<unsigned char>(point.front())))
-        point.remove_prefix(1);
-      while (!point.empty() &&
-             std::isspace(static_cast<unsigned char>(point.back())))
-        point.remove_suffix(1);
-      if (point.empty())
-        continue;
-
-      const char *p = point.data();
-      const char *p_end = p + point.size();
-      float x = 0, y = 0, z = 0;
-
-      auto res = std::from_chars(p, p_end, x, std::chars_format::general);
-      if (res.ec != std::errc{}) {
-        goto malformed;
-      }
-      p = res.ptr;
-      while (p < p_end && std::isspace(static_cast<unsigned char>(*p)))
-        p++;
-
-      res = std::from_chars(p, p_end, y, std::chars_format::general);
-      if (res.ec != std::errc{}) {
-        goto malformed;
-      }
-      p = res.ptr;
-      while (p < p_end && std::isspace(static_cast<unsigned char>(*p)))
-        p++;
-
-      res = std::from_chars(p, p_end, z, std::chars_format::general);
-      if (res.ec != std::errc{}) {
-        goto malformed;
-      }
-      p = res.ptr;
-
-      while (p < p_end && std::isspace(static_cast<unsigned char>(*p)))
-        p++;
-      if (p != p_end) {
-        goto malformed;
-      }
-
-      xmin = std::min(xmin, x);
-      ymin = std::min(ymin, y);
-      xmax = std::max(xmax, x);
-      ymax = std::max(ymax, y);
-      has_points = true;
-      continue;
-
-    malformed:
-      std::cout << std::format(
-          "Warning: Skipping malformed point \"{}\" in asset {}\n", point,
-          asset_filename);
-    }
-  }
-
-  if (!has_points || xmin > xmax || ymin > ymax) {
-    xmin = ymin = xmax = ymax = 0;
-  }
-
+  // also cached
+  const auto &parsed = this->parsed_cache[idx];
   constexpr int margin = 6;
-  int w = std::max(1.0f, xmax - xmin + 2 * margin);
-  int h = std::max(1.0f, ymax - ymin + 2 * margin);
+  int w = std::max(1, parsed.xmax - parsed.xmin + 2 * margin);
+  int h = std::max(1, parsed.ymax - parsed.ymin + 2 * margin);
   return {w, h};
 }

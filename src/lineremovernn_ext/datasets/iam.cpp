@@ -89,7 +89,10 @@ cv::Mat IAM::get_image(int idx) {
 
 AssetRow IAM::get_asset(int idx) {
   IAMWordEntry word = this->words[idx];
-  cv::Mat img = cv::imread(word.path, IMREAD_GRAYSCALE);
+  std::ifstream f(word.path, std::ios::binary);
+  std::vector<uchar> buf((std::istreambuf_iterator<char>(f)),
+                         std::istreambuf_iterator<char>());
+  cv::Mat img = cv::imdecode(buf, cv::IMREAD_GRAYSCALE);
   if (img.empty()) {
     return {.idx = idx,
             .dataset = "iam",

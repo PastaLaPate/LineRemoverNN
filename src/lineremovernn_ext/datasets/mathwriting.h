@@ -2,6 +2,15 @@
 #include <filesystem>
 #include <vector>
 
+struct ParsedAsset {
+  std::vector<std::vector<cv::Point>> strokes;
+  std::string transcript;
+  int xmin = 0;
+  int ymin = 0;
+  int xmax = 0;
+  int ymax = 0;
+};
+
 class MathWriting : public Dataset {
 public:
   MathWriting(std::filesystem::path p_path, float p_proportion = 1.0f)
@@ -17,4 +26,5 @@ public:
 
 private:
   std::vector<std::filesystem::path> assets;
+  std::vector<ParsedAsset> parsed_cache;
 };

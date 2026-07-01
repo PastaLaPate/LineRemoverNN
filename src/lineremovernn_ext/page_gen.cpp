@@ -27,6 +27,8 @@
 #include <stdexcept>
 #include <string>
 #include <thread>
+#include <tuple>
+#include <unordered_map>
 #include <vector>
 
 namespace fs = std::filesystem;
@@ -38,37 +40,37 @@ enum class BlockType { Title, CatTitle, Paragraph, Schema, SkipLine };
 
 struct PageSettings {
   bool document;
+  bool save_labels;
   int w;
   int h;
   int line_height;
+  int brightness; // per page
 
   float max_warp;
 
-  // Lines
+  // Lines params
   bool imperfect_lines;
   bool arc;
 };
 
-struct LayoutBlock {
-  BlockType type;
-  // Common Params
-  int y_start;
-  int height; // in pixels
-  // Paragraph Param
-  int n_lines;
-  // Schema Params
-  float schema_x_offset; // 0.0 = left, .5 = center, 1.0 = right
-  // SkipLine
-  int line_skipped;
-};
-
 struct PageAsset {
   int idx;
+  int page_idx; // global asset index, from left to right, top to bottom
   std::string dataset_id;
-  int w;
-  int h;
-  int x;
-  int y;
+  int w, h, x, y;
+  float scale;
+
+  // metadata
+  std::string transcript;
+};
+
+struct LayoutBlock {
+  BlockType type;
+  int y_start, height;   // Common Params in pixels
+  int n_lines;           // Paragraph Param
+  float schema_x_offset; // Schema 0.0 = left, .5 = center, 1.0 = right
+  int line_skipped;      // SkipLine
+  std::vector<std::vector<PageAsset>> assets;
 };
 
 std::atomic<bool> shutdown_requested(false);
@@ -341,17 +343,17 @@ std::vector<LayoutBlock> generate_document_layout(PageSettings settings,
           current_type = BlockType::CatTitle;
           break;
         }
-      } else if (choice < 0.8f) { // 0.1 + 0.7 = 0.8
+      } else if (choice < 0.9f) { // 0.1 + 0.8 = 0.8
         current_type = BlockType::Paragraph;
         break;
-      } else { // Remaining 0.2
+      } else { // Remaining 0.1
         current_type = BlockType::Schema;
         break;
       }
     }
 
     if (current_type == BlockType::CatTitle) {
-      float cat_scale = rand_float(1.1f, 1.3f);
+      float cat_scale = rand_float(1.3f, 2.0f);
       int cat_h = static_cast<int>(settings.line_height * cat_scale);
 
       if (y + cat_h > settings.h)
@@ -383,7 +385,7 @@ std::vector<LayoutBlock> generate_document_layout(PageSettings settings,
     } else if (current_type == BlockType::Schema) {
       float schema_ratio = rand_float(0.6f, 0.9f);
       float x_offset = rand_float(0, 1);
-      int height = rand_int(190, 250);
+      int height = rand_int(300, 500);
 
       blocks.push_back({.type = BlockType::Schema,
                         .y_start = y,
@@ -429,8 +431,10 @@ std::vector<LayoutBlock> generate_page_layout(PageSettings settings,
       int remaining = (settings.h - y) / settings.line_height;
       assert(remaining >= 1 && "rand_int would receive lo > hi");
       int n_lines = rand_int(1, std::min(4, remaining));
-      blocks.push_back(
-          {.type = BlockType::SkipLine, .y_start = y, .line_skipped = n_lines});
+      blocks.push_back({.type = BlockType::SkipLine,
+                        .y_start = y,
+                        .height = settings.line_height * n_lines,
+                        .line_skipped = n_lines});
       y += settings.line_height * n_lines;
     }
   }
@@ -444,11 +448,11 @@ std::vector<LayoutBlock> generate_layout(PageSettings settings,
                            : generate_page_layout(settings, rng);
 }
 
-std::vector<PageAsset>
-select_assets(PageSettings settings, std::vector<LayoutBlock> layout,
-              std::map<DatasetType, std::vector<std::unique_ptr<Dataset>>> const
-                  &datasets,
-              std::mt19937 &rng) {
+void select_assets(
+    PageSettings settings, std::vector<LayoutBlock> &layout,
+    std::map<DatasetType, std::vector<std::unique_ptr<Dataset>>> const
+        &datasets,
+    std::mt19937 &rng) {
   auto rand_int = [&](int lo, int hi) {
     return std::uniform_int_distribution<int>(lo, hi)(rng);
   };
@@ -456,24 +460,28 @@ select_assets(PageSettings settings, std::vector<LayoutBlock> layout,
     return std::uniform_real_distribution<float>(0.f, 1.f)(rng);
   };
 
-  std::vector<PageAsset> assets;
-
-  std::map<std::string, int> offsets;
+  std::unordered_map<std::string, int> offsets;
   for (auto const &[k, sub_datasets] : datasets) {
     for (auto const &d : sub_datasets) {
       offsets[d->id] = rand_int(0, d->len() - 1);
     }
   }
 
-  for (const auto &block : layout) {
+  int page_asset_idx = 0; // Global asset index for the entire page
+
+  for (auto &block : layout) {
     switch (block.type) {
     case BlockType::Title:
     case BlockType::CatTitle: {
       Dataset *dataset =
           get_random_dataset(datasets, {DatasetType::HandwrittenWords}, rng);
-      int x = 0;
+      int x = rand_int(50, 80);
       int max_x = settings.w - rand_int(.1 * settings.w, .5 * settings.w);
       int retry_n = 0;
+
+      block.assets.push_back({});
+      auto &line = block.assets.back();
+
       while (x < max_x) {
         offsets[dataset->id]++;
         std::array<int, 2> s =
@@ -491,21 +499,26 @@ select_assets(PageSettings settings, std::vector<LayoutBlock> layout,
           continue;
         }
 
-        assets.push_back(
+        line.push_back(
             {.idx = (int)((offsets[dataset->id] - 1) % dataset->len()),
+             .page_idx = page_asset_idx,
              .dataset_id = dataset->id,
              .w = scaled_w,
              .h = block.height,
              .x = x,
              .y = block.y_start});
+        page_asset_idx++;
         x += scaled_w + rand_int(10, 20);
       }
       break;
     }
     case BlockType::Paragraph: {
-      int x = 0;
+      int x = rand_int(30, 50);
+      block.assets.reserve(block.n_lines);
       for (int i = 0; i < block.n_lines; i++) {
         int retry_n = 0;
+        block.assets.push_back({});
+        auto &line = block.assets.back();
 
         while (x < settings.w) {
           Dataset *dataset = get_random_dataset(
@@ -527,8 +540,9 @@ select_assets(PageSettings settings, std::vector<LayoutBlock> layout,
             continue;
           }
 
-          assets.push_back(
+          line.push_back(
               {.idx = (int)((offsets[dataset->id] - 1) % dataset->len()),
+               .page_idx = page_asset_idx,
                .dataset_id = dataset->id,
                .w = scaled_w,
                .h = settings.line_height,
@@ -536,7 +550,7 @@ select_assets(PageSettings settings, std::vector<LayoutBlock> layout,
                .y = block.y_start + i * settings.line_height});
           x += scaled_w + rand_int(10, 20);
         }
-        x = rand_int(10, 20);
+        x = rand_int(30, 50);
       }
       break;
     }
@@ -552,9 +566,12 @@ select_assets(PageSettings settings, std::vector<LayoutBlock> layout,
       int w = ratio * s[0];
       int h = ratio * s[1];
       int offset = (settings.w - w) * block.schema_x_offset;
+      block.assets.push_back({});
+      auto &line = block.assets.back();
 
-      assets.push_back({
+      line.push_back({
           .idx = (int)((offsets[dataset->id] - 1) % dataset->len()),
+          .page_idx = page_asset_idx,
           .dataset_id = dataset->id,
           .w = w,
           .h = h,
@@ -568,11 +585,9 @@ select_assets(PageSettings settings, std::vector<LayoutBlock> layout,
     }
     }
   }
-
-  return assets;
 }
 
-Mat render_clean_page(PageSettings settings, std::vector<PageAsset> assets,
+Mat render_clean_page(PageSettings settings, std::vector<LayoutBlock> &layout,
                       std::unordered_map<std::string, Dataset *>
                           &datasets, // map<dataset_id, dataset*>
                       std::mt19937 &rng) {
@@ -587,33 +602,117 @@ Mat render_clean_page(PageSettings settings, std::vector<PageAsset> assets,
   int brightness = rand_int(220, 255);
   Mat clean = Mat::ones(h, w, CV_8UC1) * brightness; // White page
   Mat warped; // Temp container for warped imgs
-  for (const auto asset : assets) {
-    Dataset *d = datasets[asset.dataset_id];
-    AssetRow row = d->get_asset(asset.idx);
-    Mat img = row.image;
-    if (img.empty() || img.cols == 0 || img.rows == 0) {
-      std::cerr << std::format("[Warning] Dataset '{}' returned an empty "
-                               "image at offset {}. Skipping token.",
-                               d->id, asset.idx)
-                << std::endl;
-      continue;
+  for (auto &block : layout) {
+    for (auto &lines : block.assets) {
+      for (auto &asset : lines) {
+        Dataset *d = datasets[asset.dataset_id];
+        AssetRow row = d->get_asset(asset.idx);
+        Mat img = row.image;
+        if (img.empty() || img.cols == 0 || img.rows == 0) {
+          std::cerr << std::format("[Warning] Dataset '{}' returned an empty "
+                                   "image at offset {}. Skipping token.",
+                                   d->id, asset.idx)
+                    << std::endl;
+          continue;
+        }
+        asset.transcript = row.transcript;
+        if (d->type == DatasetType::HandwrittenWords) {
+          add_random_perspective(img, warped, settings.max_warp, asset.h, rng);
+        } else {
+          // It will just scale it without adding perspective
+          add_random_perspective(img, warped, 0, asset.h, rng);
+        }
+        Rect target_roi({asset.x, asset.y}, warped.size());
+        target_roi &= Rect(0, 0, w, h); // clamp to page bounds
+        if (target_roi.empty())
+          continue;
+        Mat warped_cropped =
+            warped(Rect(0, 0, target_roi.width, target_roi.height));
+        Mat roi = clean(target_roi);
+        cv::min(roi, warped_cropped, roi);
+      }
     }
-    if (d->type == DatasetType::HandwrittenWords) {
-      add_random_perspective(img, warped, settings.max_warp, asset.h, rng);
-    } else {
-      // It will just scale it without adding perspective
-      add_random_perspective(img, warped, 0, asset.h, rng);
-    }
-    Rect target_roi({asset.x, asset.y}, warped.size());
-    target_roi &= Rect(0, 0, w, h); // clamp to page bounds
-    if (target_roi.empty())
-      continue;
-    Mat warped_cropped =
-        warped(Rect(0, 0, target_roi.width, target_roi.height));
-    Mat roi = clean(target_roi);
-    cv::min(roi, warped_cropped, roi);
   }
   return clean;
+}
+
+std::unordered_map<BlockType, std::string> block_type_to_string = {
+    {BlockType::Title, "title"},
+    {BlockType::CatTitle, "category_title"},
+    {BlockType::Paragraph, "paragraph"},
+    {BlockType::Schema, "schema"},
+    {BlockType::SkipLine, "line_skip"}};
+
+pugi::xml_document serialize_xml(int page_idx, PageSettings settings,
+                                 std::vector<LayoutBlock> &layout) {
+  pugi::xml_document doc;
+  pugi::xml_node page = doc.append_child("page");
+  page.append_attribute("idx") = page_idx;
+  page.append_attribute("w") = settings.w;
+  page.append_attribute("h") = settings.h;
+  page.append_attribute("line_height") = settings.line_height;
+  page.append_attribute("brightness") = settings.brightness;
+
+  for (const auto &block : layout) {
+    pugi::xml_node block_node = page.append_child("block");
+    block_node.append_attribute("type") = block_type_to_string[block.type];
+    block_node.append_attribute("y_start") = block.y_start;
+    block_node.append_attribute("height") = block.height;
+    switch (block.type) {
+    case BlockType::Title:
+    case BlockType::CatTitle: {
+      pugi::xml_node line_node = block_node.append_child("line");
+      line_node.append_attribute("y") = block.y_start;
+      for (const auto &asset : block.assets[0]) {
+        pugi::xml_node word_node = line_node.append_child("word");
+        word_node.append_attribute("idx") = asset.page_idx;
+        word_node.append_attribute("dataset_idx") = asset.idx;
+        word_node.append_attribute("dataset_id") = asset.dataset_id.c_str();
+        word_node.append_attribute("x") = asset.x;
+        word_node.append_attribute("y") = asset.y;
+        word_node.append_attribute("w") = asset.w;
+        word_node.append_attribute("h") = asset.h;
+        word_node.text() = asset.transcript.c_str();
+      }
+      break;
+    }
+    case BlockType::Paragraph: {
+      for (const auto &line : block.assets) {
+        pugi::xml_node line_node = block_node.append_child("line");
+        line_node.append_attribute("y") = line[0].y;
+        for (const auto &asset : line) {
+          pugi::xml_node word_node = line_node.append_child("word");
+          word_node.append_attribute("idx") = asset.page_idx;
+          word_node.append_attribute("dataset_idx") = asset.idx;
+          word_node.append_attribute("dataset_id") = asset.dataset_id.c_str();
+          word_node.append_attribute("x") = asset.x;
+          word_node.append_attribute("y") = asset.y;
+          word_node.append_attribute("w") = asset.w;
+          word_node.append_attribute("h") = asset.h;
+          word_node.text() = asset.transcript.c_str();
+        }
+      }
+      break;
+    }
+    case BlockType::Schema: {
+      pugi::xml_node schema_node = block_node.append_child("schema");
+      auto &asset = block.assets[0][0];
+      schema_node.append_attribute("idx") = asset.page_idx;
+      schema_node.append_attribute("dataset_idx") = asset.idx;
+      schema_node.append_attribute("dataset_id") = asset.dataset_id.c_str();
+      schema_node.append_attribute("x") = asset.x;
+      schema_node.append_attribute("y") = asset.y;
+      schema_node.append_attribute("w") = asset.w;
+      schema_node.append_attribute("h") = asset.h;
+      break;
+    }
+    case BlockType::SkipLine: {
+      block_node.append_attribute("line_skipped") = block.line_skipped;
+      break;
+    }
+    }
+  }
+  return doc;
 }
 
 void generate_page(int idx, PageSettings settings,
@@ -622,15 +721,14 @@ void generate_page(int idx, PageSettings settings,
                    const fs::path &clean_dir, const fs::path &ruled_dir,
                    const fs::path &labels_dir, std::mt19937 &rng) {
   std::vector<LayoutBlock> layout = generate_layout(settings, rng);
-  std::vector<PageAsset> assets =
-      select_assets(settings, layout, datasets_by_type, rng);
+  select_assets(settings, layout, datasets_by_type, rng);
   std::unordered_map<std::string, Dataset *> dataset_by_id;
   for (const auto &[type, datasets] : datasets_by_type) {
     for (auto &dataset : datasets) {
       dataset_by_id[dataset->id] = dataset.get();
     }
   }
-  Mat clean = render_clean_page(settings, assets, dataset_by_id, rng);
+  Mat clean = render_clean_page(settings, layout, dataset_by_id, rng);
 
   std::vector<int> compression_params;
   compression_params.push_back(IMWRITE_JPEG_QUALITY);
@@ -643,6 +741,11 @@ void generate_page(int idx, PageSettings settings,
   cv::min(ruled, clean, ruled);
   fs::path ruled_path = ruled_dir / std::format("{}.jpg", idx);
   imwrite(ruled_path, ruled, compression_params);
+  if (settings.save_labels) {
+    pugi::xml_document doc = serialize_xml(idx, settings, layout);
+    fs::path xml_path = labels_dir / std::format("{}.xml", idx);
+    doc.save_file(xml_path.c_str());
+  }
 }
 
 void generate_single_page(
@@ -797,6 +900,7 @@ void generate_single_page(
 void generate_pages(fs::path target, std::vector<DatasetS> datasets, int n,
                     bool preload, bool use_arc, bool document, float max_warp,
                     bool imperfect_lines, bool save_xml) {
+  cv::setNumThreads(1);
   std::signal(SIGINT, signal_handler);
 
   shutdown_requested = false;
@@ -948,8 +1052,8 @@ void generate_pages(fs::path target, std::vector<DatasetS> datasets, int n,
                                    i);
         }
 
-        /*generate_single_page(i, max_warp, use_arc, document, imperfect_lines,
-                             save_xml, datasets_by_type, 0, clean_dir,
+        /*generate_single_page(i, max_warp, use_arc, document,
+           imperfect_lines, save_xml, datasets_by_type, 0, clean_dir,
                              ruled_dir, labels_dir);*/
       }
     });

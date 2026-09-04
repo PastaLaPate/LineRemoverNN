@@ -21,16 +21,25 @@ void MathWriting::load() {
 
   std::vector<std::filesystem::path> target_dirs = {this->path / "train",
                                                     this->path / "synthetic"};
+
+  int count = 0;
+
   for (const auto &dir : target_dirs) {
-    if (!std::filesystem::exists(dir))
+    if (!std::filesystem::exists(dir) || count > 5000)
       continue;
     for (const auto &entry :
          std::filesystem::recursive_directory_iterator(dir)) {
       if (entry.is_regular_file() && entry.path().extension() == ".inkml") {
         this->assets.push_back(entry.path());
+        count++;
+      }
+      if (count > 5000) {
+        break;
       }
     }
   }
+
+  std::cout << "Parsing " << count << " Math XML files." << std::endl;
 
   this->parsed_cache.resize(this->assets.size());
 

@@ -77,13 +77,26 @@ bool IAM::valid() {
 
 long IAM::len() { return this->words.size(); }
 
-cv::Mat IAM::get_image(int idx) {
+cv::Mat IAM::load_and_process_disk(int idx) {
+  if (idx < 0 || static_cast<size_t>(idx) >= this->words.size()) {
+    return cv::Mat();
+  }
+
   IAMWordEntry word = this->words[idx];
   cv::Mat img = cv::imread(word.path, IMREAD_GRAYSCALE);
+  if (!img.empty()) {
+    img.setTo(255, img > 160);
+  }
+  return img;
+}
+
+void IAM::evict_unlocked() {}
+
+cv::Mat IAM::get_image(int idx) {
+  IAMWordEntry word = this->words[idx];
   if (img.empty()) {
     return img;
   }
-  img.setTo(255, img > 160);
   return img;
 }
 

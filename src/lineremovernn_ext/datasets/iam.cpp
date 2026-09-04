@@ -94,10 +94,13 @@ void IAM::evict_unlocked() {}
 
 cv::Mat IAM::get_image(int idx) {
   IAMWordEntry word = this->words[idx];
+
+  /*
   if (img.empty()) {
     return img;
   }
-  return img;
+    */
+  return cv::Mat();
 }
 
 AssetRow IAM::get_asset(int idx) {

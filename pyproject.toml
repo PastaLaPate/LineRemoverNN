@@ -6,6 +6,7 @@ readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "colorama>=0.4.6",
+    "conan>=2.32.0",
     "distro>=1.9.0",
     "matplotlib>=3.10.8",
     "opencv-python>=4.13.0.92",

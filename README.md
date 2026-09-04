@@ -40,7 +40,8 @@ pacman -S mingw-w64-ucrt-x86_64-gcc mingw-w64-ucrt-x86_64-cmake \
 
 #### Linux:
 
-`sudo apt install -y build-essential cmake pkg-config libcairo2-dev libopencv-dev`
+Debian like: `sudo apt install -y build-essential cmake pkg-config libcairo2-dev libopencv-dev`
+Fedora like: `sudo dnf install @development-tools cmake pkgconf-pkg-config cairo-devel opencv-devel gcc-c++ python3-devel cairo-gobject-devel`
 
 #### Mac/Linux:
 

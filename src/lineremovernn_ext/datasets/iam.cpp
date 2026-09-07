@@ -109,7 +109,6 @@ AssetRow IAM::get_asset(int idx) {
   std::vector<uchar> buf((std::istreambuf_iterator<char>(f)),
                          std::istreambuf_iterator<char>());
   cv::Mat img = cv::imdecode(buf, cv::IMREAD_GRAYSCALE);
-  std::cout << word.transcript << std::endl;
   if (img.empty()) {
     return {.idx = idx,
             .dataset = "iam",

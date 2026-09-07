@@ -470,6 +470,23 @@ void select_assets(
     }
   }
 
+  std::unordered_map<std::string, float> typical_scales;
+  auto get_typical_scale = [&](Dataset *dataset, int target_height) {
+    std::string key = dataset->id + "_" + std::to_string(target_height);
+    if (typical_scales.find(key) == typical_scales.end()) { // No cached
+      std::vector<int> heights;
+      for (int k = 0; k < 50; k++) {
+        int peek_idx = rand_int(0, dataset->len());
+        heights.push_back(dataset->get_size(peek_idx)[1]);
+      }
+      std::sort(heights.begin(), heights.end());
+      int median_h = heights[heights.size() / 2];
+      typical_scales[key] = static_cast<float>(target_height) /
+                            std::max(1, median_h); // prevent /0
+    }
+    return typical_scales[key];
+  };
+
   int page_asset_idx = 0; // Global asset index for the entire page
 
   for (auto &block : layout) {
@@ -485,13 +502,22 @@ void select_assets(
       block.assets.push_back({});
       auto &line = block.assets.back();
 
+      float typical_scale = get_typical_scale(dataset, block.height);
+
       while (x < max_x) {
         offsets[dataset->id]++;
         std::array<int, 2> s =
             dataset->get_size((offsets[dataset->id] - 1) % dataset->len());
-        float scale = static_cast<float>(block.height) / s[1];
+        float raw_scale = static_cast<float>(block.height) / s[1];
+        float scale = raw_scale;
+
+        if (raw_scale > typical_scale * 2.0f) { // > x2 scalling
+          scale = typical_scale;
+        }
 
         int scaled_w = static_cast<int>(s[0] * scale);
+        int scaled_h = static_cast<int>(s[1] * scale);
+        int y_offset = block.height - scaled_h; // Anchor to bottom
 
         if (scaled_w + x > max_x) {
           if (retry_n + 1 > 3) {
@@ -507,9 +533,9 @@ void select_assets(
              .page_idx = page_asset_idx,
              .dataset_id = dataset->id,
              .w = scaled_w,
-             .h = block.height,
+             .h = scaled_h,
              .x = x,
-             .y = block.y_start});
+             .y = block.y_start + y_offset});
         page_asset_idx++;
         x += scaled_w + rand_int(10, 20);
       }
@@ -530,9 +556,19 @@ void select_assets(
           offsets[dataset->id]++;
           std::array<int, 2> s =
               dataset->get_size((offsets[dataset->id] - 1) % dataset->len());
-          float scale = static_cast<float>(settings.line_height) / s[1];
+
+          float typical_scale =
+              get_typical_scale(dataset, settings.line_height);
+          float raw_scale = static_cast<float>(settings.line_height) / s[1];
+          float scale = raw_scale;
+
+          if (raw_scale > typical_scale * 2.0f) { // > x2 scalling
+            scale = typical_scale;
+          }
 
           int scaled_w = static_cast<int>(s[0] * scale);
+          int scaled_h = static_cast<int>(s[1] * scale);
+          int y_offset = settings.line_height - scaled_h; // Anchor to bottom
 
           if (scaled_w + x > settings.w) {
             if (retry_n + 1 > 3) {
@@ -548,9 +584,9 @@ void select_assets(
                .page_idx = page_asset_idx,
                .dataset_id = dataset->id,
                .w = scaled_w,
-               .h = settings.line_height,
+               .h = scaled_h,
                .x = x,
-               .y = block.y_start + i * settings.line_height});
+               .y = block.y_start + y_offset + i * settings.line_height});
           x += scaled_w + rand_int(10, 20);
         }
         x = rand_int(30, 50);
@@ -899,11 +935,13 @@ void generate_pages(fs::path target, std::vector<DatasetS> datasets, int n,
                                         .speed_unit = "page/s",
                                     });
   std::atomic<int> next_page_idx{0};
-  unsigned int num_threads = std::thread::hardware_concurrency();
+  unsigned int num_threads = std::min(std::thread::hardware_concurrency(),
+                                      static_cast<unsigned int>(n));
   std::vector<std::jthread> workers;
 
-  std::cout << std::format("Spawning {} worker threads... Starting generation",
-                           num_threads)
+  std::cout << std::format(
+                   "Spawning {} worker threads... Starting generation or not ?",
+                   num_threads)
             << std::endl;
 
   auto start_time = std::chrono::high_resolution_clock::now();

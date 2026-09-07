@@ -36,4 +36,6 @@ venv.bak/
 compile_commands.json
 
 saved/*
-# !saved/models/
+# !saved/models/# pixi environments
+.pixi/*
+!.pixi/config.toml

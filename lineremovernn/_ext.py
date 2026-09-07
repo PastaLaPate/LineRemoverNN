@@ -6,7 +6,10 @@ Falls back gracefully if the extension wasn't built.
 import numpy as np
 
 try:
-    from lineremovernn._lineremovernn_ext import Dataset, generate_pages  # noqa: F401
+    from lineremovernn._lineremovernn_ext import (  # noqa: F401
+        Dataset,
+        generate_pages,
+    )
 
     HAS_EXT = True
 except ImportError:

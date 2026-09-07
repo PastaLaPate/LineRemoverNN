@@ -19,53 +19,55 @@ The goal of this model is to make easier the word recognition from OCR.
 
 ## Installation
 
-Required:
-🐍 `python >3.10` Recommended: python 3.14.
-UV Package manager.
-CUDA. If you have amd gpu idk i dont have one.
+### Prerequisites
 
-### Install Dependencies
+- [Pixi](https://pixi.prefix.dev/latest/installation/)
+- [UV](https://docs.astral.sh/uv/getting-started/installation/)
+- NVIDIA GPU with conda 13, I don't have AMD GPU to support ROMc
 
-#### Windows (limited support)
-
-1: Use MSYS (UCRT64):
+### Setup Environment
 
 ```bash
-pacman -S mingw-w64-ucrt-x86_64-gcc mingw-w64-ucrt-x86_64-cmake \
- mingw-w64-ucrt-x86_64-pkg-config mingw-w64-ucrt-x86_64-cairo \
- mingw-w64-ucrt-x86_64-opencv
+# Install CMake, opencv, cairo, compile cpp etc...
+pixi run sync
+
+# Install pre-commit hooks
+pixi run hooks
+
+# Generate compile_commands.json
+pixi run clangd-setup
 ```
 
-2: Native: somehow use vcpkg.
+## Quickstart
 
-#### Linux:
+### Install Datasets
 
-Debian like: `sudo apt install -y build-essential cmake pkg-config libcairo2-dev libopencv-dev`
-Fedora like: `sudo dnf install @development-tools cmake pkgconf-pkg-config cairo-devel opencv-devel gcc-c++ python3-devel cairo-gobject-devel`
+These commands automatically download and extract popular datasets.
 
-#### Mac/Linux:
+#### IAM
 
-`brew install cmake pkg-config cairo opencv`
+`pixi run lineremovernn download-dataset -d iam`
 
-#### Then
+#### Mathwriting
 
-`uv sync`
+`pixi run lineremovernn download-dataset -d mathwriting`
 
-#### Dev:
+#### AI2D
 
-`bash ./dev-install.sh` Forces build of the cpp generation module, also generates compile_commands.json for clangd.
-
-### Install IAM Dataset 🗒️
-
-`uv run lineremovernn download-dataset -d iam`
+`pixi run lineremovernn download-dataset -d ai2d`
 
 ### Generate synthetic pages
 
-`uv run lineremovernn generate-pages -n 15000 -a`
-`-a` is for adding arcs instead of straight lines.
-
-You can preview the generated datasets with
-`uv run lineremovernn preview-dataset -n 5 -d pages`
+`uv run lineremovernn generate-pages`
+Arguments:
+-n, --n: Number of images to generate
+--datasets: Space-separated datasets and proportions (e.g., iam:1 mathwriting:0.3)
+-a, --arc: Use arcs instead of lines.
+-mw, --max-warp: Maximum perspective warp factor for word crops (0.0 to disable, old default was 0.3)
+-il, --imperfect-lines: Add noise to lines
+-m, --save-metadata: Export ground-truth word layout coordinates as XML files
+-d, --docs: Make document like layouts instead of raw lines
+-w, --workers: CPU worker processes (default: all cores)
 
 ## Train Model 🧑‍🏫
 
@@ -80,7 +82,7 @@ Run `uv run lineremovernn train -e 25 -l -b 6`
 
 ## Usage
 
-No lib for the moment.
+No python lib for the moment.
 You can use the gui:
 `uv run lineremovernn gui-infer`
 

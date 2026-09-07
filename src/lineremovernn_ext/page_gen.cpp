@@ -593,7 +593,7 @@ void select_assets(
 Mat render_clean_page(PageSettings settings, std::vector<LayoutBlock> &layout,
                       std::unordered_map<std::string, Dataset *>
                           &datasets, // map<dataset_id, dataset*>
-                      std::mt19937 &rng) {
+                      std::mt19937 &rng, bool debug) {
   auto rand_int = [&](int lo, int hi) {
     return std::uniform_int_distribution<int>(lo, hi)(rng);
   };
@@ -668,7 +668,7 @@ Mat render_clean_page(PageSettings settings, std::vector<LayoutBlock> &layout,
     }
   }
 
-  if (asset_count > 0) {
+  if (asset_count > 0 && debug) {
     static std::mutex log_mutex;
     std::lock_guard<std::mutex> lk(log_mutex);
 
@@ -773,7 +773,7 @@ void generate_page(int idx, PageSettings settings,
                    std::map<DatasetType, std::vector<std::unique_ptr<Dataset>>>
                        &datasets_by_type,
                    const fs::path &clean_dir, const fs::path &ruled_dir,
-                   const fs::path &labels_dir, std::mt19937 &rng) {
+                   const fs::path &labels_dir, std::mt19937 &rng, bool debug) {
 
   std::vector<LayoutBlock> layout = generate_layout(settings, rng);
 
@@ -787,11 +787,13 @@ void generate_page(int idx, PageSettings settings,
     }
   }
 
-  Mat clean = render_clean_page(settings, layout, dataset_by_id, rng);
+  Mat clean = render_clean_page(settings, layout, dataset_by_id, rng, debug);
 
   auto end_time = std::chrono::high_resolution_clock::now();
   std::chrono::duration<double, std::milli> duration_ms = end_time - start_time;
-  std::cout << "Render in " << duration_ms.count() << " ms" << std::endl;
+  if (debug) {
+    std::cout << "Render in " << duration_ms.count() << " ms" << std::endl;
+  }
 
   std::vector<int> compression_params;
   compression_params.push_back(IMWRITE_JPEG_QUALITY);
@@ -818,7 +820,7 @@ void generate_page(int idx, PageSettings settings,
 
 void generate_pages(fs::path target, std::vector<DatasetS> datasets, int n,
                     bool preload, bool use_arc, bool document, float max_warp,
-                    bool imperfect_lines, bool save_xml) {
+                    bool imperfect_lines, bool save_xml, bool debug) {
   cv::setNumThreads(1);
   std::signal(SIGINT, signal_handler);
 
@@ -958,7 +960,7 @@ void generate_pages(fs::path target, std::vector<DatasetS> datasets, int n,
                                    .imperfect_lines = imperfect_lines,
                                    .arc = use_arc};
           generate_page(i, settings, datasets_by_type, clean_dir, ruled_dir,
-                        labels_dir, local_rng);
+                        labels_dir, local_rng, debug);
           {
             std::lock_guard<std::mutex> lock(progress_mutex);
             work++;

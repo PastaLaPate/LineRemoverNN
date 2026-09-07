@@ -1,0 +1,24 @@
+[workspace]
+name = "lineremovernn"
+channels = ["conda-forge"]
+platforms = ["linux-64"]
+
+[dependencies]
+opencv = ">=4.0.0,<5.0.0"
+cairo = "*"
+expat = "*"
+pkg-config = "*"
+cmake = "*"
+compilers = "*"
+
+[pypi-dependencies]
+
+[tasks]
+sync = "uv sync --locked --all-extras --dev"
+lineremovernn = "uv run lineremovernn"
+dev = "uv run lineremovernn"
+hooks = "uv run pre-commit install"
+build = "uv pip install --no-build-isolation -e ."
+configure-clangd = "cmake -S . -B build/clangd -DPython_EXECUTABLE=$(which python) -Dnanobind_DIR=$(python -c 'import nanobind; print(nanobind.cmake_dir())') -DCMAKE_EXPORT_COMPILE_COMMANDS=ON"
+link-compile-commands = "ln -sf build/clangd/compile_commands.json compile_commands.json"
+clangd-setup = { depends-on = ["configure-clangd", "link-compile-commands"] }

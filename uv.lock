@@ -555,7 +555,6 @@ dependencies = [
 [package.dev-dependencies]
 dev = [
     { name = "cmake" },
-    { name = "lineremovernn" },
     { name = "nanobind" },
     { name = "pre-commit" },
     { name = "scikit-build-core" },
@@ -584,7 +583,6 @@ requires-dist = [
 [package.metadata.requires-dev]
 dev = [
     { name = "cmake", specifier = ">=4.3.2" },
-    { name = "lineremovernn" },
     { name = "nanobind", specifier = ">=2.0" },
     { name = "pre-commit", specifier = ">=4.5.1" },
     { name = "scikit-build-core", specifier = ">=0.12.2" },

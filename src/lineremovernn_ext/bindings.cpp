@@ -24,7 +24,7 @@ NB_MODULE(_lineremovernn_ext, m) {
       .def_rw("proportion", &DatasetS::proportion);
 
   m.def("generate_pages", &generate_pages, "target"_a, "datasets"_a, "n"_a = 5,
-        "preload"_a = false, "use_arc"_a = true, "document"_a = true,
-        "max_warp"_a = .1, "imperfect_lines"_a = true, "save_xml"_a = false,
-        "debug"_a = false, nb::call_guard<nb::gil_scoped_release>());
+        "use_arc"_a = true, "document"_a = true, "max_warp"_a = .1,
+        "imperfect_lines"_a = true, "save_xml"_a = false, "debug"_a = false,
+        "max_workers"_a = 0, nb::call_guard<nb::gil_scoped_release>());
 }

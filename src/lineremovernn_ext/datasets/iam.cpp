@@ -106,8 +106,26 @@ cv::Mat IAM::get_image(int idx) {
 AssetRow IAM::get_asset(int idx) {
   IAMWordEntry word = this->words[idx];
   std::ifstream f(word.path, std::ios::binary);
+
+  if (!f.is_open()) { // File doesnt exist
+    std::cerr << std::format("[IAM] Missing file: {}\n", word.path.string());
+    return {.idx = idx,
+            .dataset = "iam",
+            .image = cv::Mat(),
+            .transcript = word.transcript};
+  }
+
   std::vector<uchar> buf((std::istreambuf_iterator<char>(f)),
                          std::istreambuf_iterator<char>());
+
+  if (buf.empty()) {
+    std::cerr << std::format("[IAM] Empty file: {}\n", word.path.string());
+    return {.idx = idx,
+            .dataset = "iam",
+            .image = cv::Mat(),
+            .transcript = word.transcript};
+  }
+
   cv::Mat img = cv::imdecode(buf, cv::IMREAD_GRAYSCALE);
   if (img.empty()) {
     return {.idx = idx,

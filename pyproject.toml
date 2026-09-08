@@ -37,7 +37,7 @@ build-backend = "scikit_build_core.build"
 
 [tool.scikit-build]
 build-dir = "build/{wheel_tag}"
-cmake.build-type = "Release"
+cmake.build-type = "Debug"
 wheel.packages = ["lineremovernn"]
 
 [tool.scikit-build.cmake.define]

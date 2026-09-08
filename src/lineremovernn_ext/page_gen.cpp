@@ -476,7 +476,7 @@ void select_assets(
     if (typical_scales.find(key) == typical_scales.end()) { // No cached
       std::vector<int> heights;
       for (int k = 0; k < 50; k++) {
-        int peek_idx = rand_int(0, dataset->len());
+        int peek_idx = rand_int(0, dataset->len() - 1);
         heights.push_back(dataset->get_size(peek_idx)[1]);
       }
       std::sort(heights.begin(), heights.end());
@@ -855,8 +855,9 @@ void generate_page(int idx, PageSettings settings,
 }
 
 void generate_pages(fs::path target, std::vector<DatasetS> datasets, int n,
-                    bool preload, bool use_arc, bool document, float max_warp,
-                    bool imperfect_lines, bool save_xml, bool debug) {
+                    bool use_arc, bool document, float max_warp,
+                    bool imperfect_lines, bool save_xml, bool debug,
+                    int max_workers) {
   cv::setNumThreads(1);
   std::signal(SIGINT, signal_handler);
 
@@ -935,8 +936,10 @@ void generate_pages(fs::path target, std::vector<DatasetS> datasets, int n,
                                         .speed_unit = "page/s",
                                     });
   std::atomic<int> next_page_idx{0};
-  unsigned int num_threads = std::min(std::thread::hardware_concurrency(),
-                                      static_cast<unsigned int>(n));
+  unsigned int num_threads =
+      std::min(max_workers == 0 ? std::thread::hardware_concurrency()
+                                : static_cast<unsigned int>(max_workers),
+               static_cast<unsigned int>(n));
   std::vector<std::jthread> workers;
 
   std::cout << std::format(

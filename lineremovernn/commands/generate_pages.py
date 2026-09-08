@@ -1,6 +1,7 @@
 import argparse
 from argparse import Namespace
-from typing import Sequence
+from collections.abc import Sequence
+from typing import ClassVar
 
 from lineremovernn._lineremovernn_ext import Dataset, generate_pages
 from lineremovernn.commands.command import Command
@@ -16,7 +17,7 @@ logger = logging.get_logger("PageGenerator")
 
 
 class ParseDatasets(argparse.Action):
-    ALLOWED_DATASETS = {
+    ALLOWED_DATASETS: ClassVar[set[str]] = {
         IAMDataset.ID.lower(),
         MathWritingDataset.ID.lower(),
         AI2DDataset.ID.lower(),
@@ -96,7 +97,9 @@ class GeneratePagesCPPCommand(Command):
             "--datasets",
             nargs="+",
             action=ParseDatasets,
-            default=[Dataset(IAMDataset.ID.lower(), str(IAMDataset.path()), 1)],
+            default=[
+                Dataset(IAMDataset.ID.lower(), str(IAMDataset.path()), 1)
+            ],
             help="Space-separated datasets and proportions (e.g., iam:1 mathwriting:0.3)",
         )
         parser.add_argument(
@@ -126,12 +129,6 @@ class GeneratePagesCPPCommand(Command):
             help="Inject tiny structural imperfections and gaps into rules",
         )
         parser.add_argument(
-            "-p",
-            "--preload",
-            action="store_true",
-            help="Preload the images in RAM.",
-        )
-        parser.add_argument(
             "-m",
             "--save-metadata",
             action="store_true",
@@ -156,10 +153,11 @@ class GeneratePagesCPPCommand(Command):
             PagesDataset.path(),
             datasets=args.datasets,
             n=args.n,
-            preload=args.preload,
             use_arc=args.arc,
             max_warp=args.max_warp,
             imperfect_lines=args.imperfect_lines,
             save_xml=args.save_metadata,
             document=args.docs,
+            debug=False,
+            max_workers=args.workers or 0,
         )

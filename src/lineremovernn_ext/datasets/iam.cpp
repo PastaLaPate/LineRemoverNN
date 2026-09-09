@@ -1,15 +1,18 @@
 #include "iam.h"
 #include "../utils.hpp"
 #include "datasets/datasets.h"
+#include <cstdint>
 #include <filesystem>
 #include <format>
 #include <fstream>
+#include <iosfwd>
 #include <iostream>
 #include <iterator>
 #include <numeric>
 #include <opencv2/core/types.hpp>
 #include <opencv2/imgcodecs.hpp>
 #include <opencv4/opencv2/core/mat.hpp>
+#include <ostream>
 #include <span>
 #include <string>
 #include <string_view>
@@ -63,6 +66,89 @@ void IAM::load() {
         parsed_count, duration_ms.count(), avg_time);
   } else {
     std::cout << "[IAM::load] No words were loaded.\n";
+  }
+
+  if (this->index) {
+
+    auto start_time = std::chrono::high_resolution_clock::now();
+    std::cout << "[IAM::load::indexer] Starting indexing..." << std::endl;
+    std::filesystem::path blobFile = this->path / "words.blob";
+    constexpr uint64_t BLOB_MAGIC =
+        0x1A571A733ABCDEF0ULL; // 1A571A733ABCDEF + version
+    if (std::filesystem::exists(blobFile) &&
+        !std::filesystem::is_directory(blobFile)) {
+      std::ifstream in(blobFile, std::ios::binary);
+      uint64_t magic, count;
+      in.read(
+          reinterpret_cast<char *>(&magic),
+          sizeof(
+              magic)); // do like magic was a list of bytes instead of an int.
+      in.read(reinterpret_cast<char *>(&count), sizeof(count));
+
+      if (magic == BLOB_MAGIC && count == parsed_count) {
+        return;
+      }
+      // Version changed or new words added for some reason, redo indexing
+    }
+    std::ofstream out(blobFile, std::ios::binary |
+                                    std::ios::trunc); // Delete existing data.
+    out.write(reinterpret_cast<const char *>(&BLOB_MAGIC), sizeof(BLOB_MAGIC));
+    out.write(reinterpret_cast<char *>(&parsed_count), sizeof(parsed_count));
+
+    std::streampos index_start =
+        out.tellp(); // Get current offset (index_start) to write index when
+                     // finished loading / writing all of the data.
+
+    // Index structure: uint64 (8 bytes) byte offset + uint32 (4 bytes) len of
+    // data
+
+    out.seekp(
+        parsed_count * (sizeof(uint64_t) + sizeof(uint32_t)),
+        std::ios::cur); // Cur: relative to current, else can be rewritten as
+                        // sizeof(magic) + sizeof(count) + parsed_count...
+
+    // Fill datas
+    std::vector<uint64_t> offsets(parsed_count);
+    std::vector<uint32_t> lengths(parsed_count);
+
+    uint64_t offset_pos = 0; // Next image's data offset
+
+    for (uint64_t i = 0; i < parsed_count; i++) {
+      IAMWordEntry word = this->words[i];
+      std::ifstream img_in(word.path, std::ios::binary);
+      if (!img_in.is_open()) {
+        // Cant find image
+        std::cerr << std::format(
+            "[IAM::load::blob_generator] Missing file: {}, ignoring\n",
+            word.path.string());
+        offsets[i] = 0;
+        lengths[i] = 0;
+        continue;
+      }
+      std::vector<char> bytes((std::istreambuf_iterator<char>(img_in)),
+                              std::istreambuf_iterator<char>());
+      offsets[i] = offset_pos;
+      lengths[i] = static_cast<uint32_t>(bytes.size());
+      if (!bytes.empty())
+        out.write(bytes.data(), bytes.size());
+
+      offset_pos += bytes.size();
+    }
+
+    out.seekp(index_start);
+
+    for (uint64_t i = 0; i < parsed_count; i++) {
+      out.write(reinterpret_cast<char *>(&offsets[i]), sizeof(uint64_t));
+      out.write(reinterpret_cast<char *>(&lengths[i]), sizeof(uint32_t));
+    }
+
+    auto end_time = std::chrono::high_resolution_clock::now();
+
+    std::chrono::duration<double, std::milli> duration_ms =
+        end_time - start_time;
+
+    std::cout << "[IAM::load::blob_generator] Blob of size " << offset_pos
+              << " generated in " << duration_ms.count() << "ms" << std::endl;
   }
 }
 

@@ -28,6 +28,8 @@ public:
   enum DatasetType type;
   std::filesystem::path path;
   float proportion;
+  bool preload = false;
+  bool index = false;
 
   Dataset(std::string p_id, enum DatasetType type, std::filesystem::path p_path)
       : id(std::move(p_id)), type(type), path(std::move(p_path)),

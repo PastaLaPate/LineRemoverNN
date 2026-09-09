@@ -907,6 +907,7 @@ void generate_pages(fs::path target, std::vector<DatasetS> datasets, int n,
 
   for (const auto &d : datasets) {
     auto dataset = make_dataset(d); // throws if unknown id
+    dataset->index = true;          // temp for debug
     if (!dataset->valid())
       throw std::invalid_argument("Invalid dataset path: " + d.path.string());
     datasets_by_type[dataset->type].push_back(std::move(dataset));

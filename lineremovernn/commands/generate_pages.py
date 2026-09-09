@@ -147,6 +147,13 @@ class GeneratePagesCPPCommand(Command):
             default=None,
             help="CPU worker processes (default: all cores)",
         )
+        parser.add_argument(
+            "-db",
+            "--debug",
+            action="store_true",
+            default=None,
+            help="Debug generation speed.",
+        )
 
     def execute(self, args: Namespace) -> None:
         generate_pages(
@@ -158,6 +165,6 @@ class GeneratePagesCPPCommand(Command):
             imperfect_lines=args.imperfect_lines,
             save_xml=args.save_metadata,
             document=args.docs,
-            debug=False,
+            debug=args.debug or False,
             max_workers=args.workers or 0,
         )

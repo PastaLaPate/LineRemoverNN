@@ -638,7 +638,7 @@ Mat render_clean_page(PageSettings settings, std::vector<LayoutBlock> &layout,
   };
   int w = settings.w;
   int h = settings.h;
-  int brightness = rand_int(220, 255);
+  int brightness = settings.brightness;
   Mat clean = Mat::ones(h, w, CV_8UC1) * brightness; // White page
   Mat warped; // Temp container for warped imgs
 
@@ -996,9 +996,12 @@ void generate_pages(fs::path target, std::vector<DatasetS> datasets, int n,
           }
 
           PageSettings settings = {.document = document,
+                                   .save_labels = save_xml,
+
                                    .w = w,
                                    .h = h,
                                    .line_height = line_height,
+                                   .brightness = rand_int(220, 255),
                                    .max_warp = max_warp,
                                    .imperfect_lines = imperfect_lines,
                                    .arc = use_arc};

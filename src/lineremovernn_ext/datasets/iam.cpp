@@ -94,6 +94,8 @@ void IAM::load() {
   }
 
   if (this->preload) {
+
+    auto start_time = std::chrono::high_resolution_clock::now();
     std::cout << "[IAM::load] Preloading images..." << std::endl;
     this->preloaded_images.resize(parsed_count);
     for (uint64_t i = 0; i < parsed_count; i++) {
@@ -103,6 +105,24 @@ void IAM::load() {
       ::close(this->blob_fd);
       this->blob_fd = -1;
     }
+    auto end_time = std::chrono::high_resolution_clock::now();
+    std::chrono::duration<double, std::milli> duration_ms =
+        end_time - start_time;
+    double avg_time = duration_ms.count() / parsed_count;
+    std::cout << std::format(
+        "[IAM::load] Preloaded {} words in {:.2f} ms ({:.4f} ms/word)\n",
+        parsed_count, duration_ms.count(), avg_time);
+    size_t usage = sizeof(this->preloaded_images) +
+                   (this->preloaded_images.capacity() * sizeof(cv::Mat));
+    for (const auto &mat : this->preloaded_images) {
+      if (!mat.empty() && mat.data) {
+        usage += (mat.step * mat.rows);
+      }
+    }
+
+    std::cout << std::format("[IAM::load] Total ram usage: {:.2f} MiB",
+                             usage / (1024.0 * 1024.0))
+              << std::endl;
   }
 }
 

@@ -17,9 +17,9 @@ struct IAMWordEntry {
 class IAM : public Dataset {
 public:
   IAM(std::filesystem::path p_path, float p_proportion = 1.0f,
-      size_t max_cache_mb = 1024)
+      bool index = true, bool preload = true)
       : Dataset("iam", DatasetType::HandwrittenWords, std::move(p_path),
-                p_proportion) {}
+                p_proportion, index, preload) {}
 
   cv::Mat get_image(int idx) override;
   AssetRow get_asset(int idx) override;

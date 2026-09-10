@@ -15,10 +15,13 @@ NB_MODULE(_lineremovernn_ext, m) {
   nb::class_<DatasetS>(m, "Dataset")
       .def(
           "__init__",
-          [](DatasetS *d, std::string id, std::string path, float proportion) {
-            new (d) DatasetS{std::move(id), std::move(path), proportion};
+          [](DatasetS *d, std::string id, std::string path, float proportion,
+             bool preload, bool index) {
+            new (d) DatasetS{std::move(id), std::move(path), proportion,
+                             preload, index};
           },
-          "id"_a, "path"_a, "proportion"_a = 1.0f)
+          "id"_a, "path"_a, "proportion"_a = 1.0f, "preload"_a = false,
+          "index"_a = false)
       .def_rw("id", &DatasetS::id)
       .def_rw("path", &DatasetS::path)
       .def_rw("proportion", &DatasetS::proportion);

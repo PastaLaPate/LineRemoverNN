@@ -14,6 +14,8 @@ struct DatasetS {
   std::string id;
   std::filesystem::path path;
   float proportion;
+  bool preload;
+  bool index;
 };
 
 enum class DatasetType {
@@ -36,9 +38,9 @@ public:
         proportion(1.0f) {}
 
   Dataset(std::string p_id, enum DatasetType type, std::filesystem::path p_path,
-          float p_proportion)
+          float p_proportion, bool index, bool preload)
       : id(std::move(p_id)), type(type), path(std::move(p_path)),
-        proportion(p_proportion) {}
+        proportion(p_proportion), index(index), preload(preload) {}
 
   virtual cv::Mat get_image(int idx) = 0;
   virtual AssetRow get_asset(int idx) = 0;

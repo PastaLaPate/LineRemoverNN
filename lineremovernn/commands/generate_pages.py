@@ -13,7 +13,7 @@ from lineremovernn.utils import logging
 
 logger = logging.get_logger("PageGenerator")
 
-# Ex uv run lineremovernn generate-pages -m -il -a -n 15 --datasets iam:1 mathwriting:0.3
+# Ex uv run lineremovernn generate-pages -m -il -a -n 15 --datasets iam:1:ip mathwriting:0.3
 
 
 class ParseDatasets(argparse.Action):
@@ -30,7 +30,7 @@ class ParseDatasets(argparse.Action):
         values: str | Sequence[str] | None,
         option_string: str | None = None,
     ) -> None:
-        datasets_dict: dict[str, float] = {}
+        datasets_dict: dict[str, tuple[float, bool, bool]] = {}
 
         if not values:
             raise parser.error("No datasets given")
@@ -39,11 +39,18 @@ class ParseDatasets(argparse.Action):
 
         for item in values:
             try:
-                name, proportion_str = item.split(":")
+                split_ = item.split(":")
+                if len(split_) == 2:
+                    name, proportion_str = split_
+                    flags_str = ""
+                elif len(split_) == 3:
+                    name, proportion_str, flags_str = split_
                 proportion = float(proportion_str)
+                preload = "p" in flags_str
+                index = "i" in flags_str
             except ValueError:
                 raise parser.error(
-                    f"Invalid format for '{item}'. Must be 'name:proportion' (e.g., iam:0.5)"
+                    f"Invalid format for '{item}'. Must be 'name:proportion:flags' (e.g., mathwriting:0.5, iam:1:ip)"
                 )
             name_lower = name.lower()
             if name_lower not in self.ALLOWED_DATASETS:
@@ -56,14 +63,18 @@ class ParseDatasets(argparse.Action):
                     f"Duplicate dataset ID detected: '{name}' was provided more than once."
                 )
 
-            datasets_dict[name_lower] = proportion
+            datasets_dict[name_lower] = (proportion, preload, index)
         datasets: list[Dataset] = []
-        for dataset_id, p in datasets_dict.items():
+        for dataset_id, properties in datasets_dict.items():
             if dataset_id == IAMDataset.ID.lower():
                 if not IAMDataset.available():
                     raise parser.error("IAM Dataset isn't available")
                 datasets.append(
-                    Dataset(IAMDataset.ID.lower(), str(IAMDataset.path()), p)
+                    Dataset(
+                        IAMDataset.ID.lower(),
+                        str(IAMDataset.path()),
+                        *properties,
+                    )
                 )
             elif dataset_id == MathWritingDataset.ID.lower():
                 if not MathWritingDataset.available():
@@ -72,16 +83,19 @@ class ParseDatasets(argparse.Action):
                     Dataset(
                         MathWritingDataset.ID.lower(),
                         str(MathWritingDataset.path()),
-                        p,
+                        *properties,
                     )
                 )
             elif dataset_id == AI2DDataset.ID.lower():
                 if not AI2DDataset.available():
                     raise parser.error("AI2D Dataset isn't available")
                 datasets.append(
-                    Dataset(AI2DDataset.ID.lower(), str(AI2DDataset.path()), p)
+                    Dataset(
+                        AI2DDataset.ID.lower(),
+                        str(AI2DDataset.path()),
+                        *properties,
+                    )
                 )
-
         setattr(namespace, self.dest, datasets)
 
 
@@ -100,7 +114,7 @@ class GeneratePagesCPPCommand(Command):
             default=[
                 Dataset(IAMDataset.ID.lower(), str(IAMDataset.path()), 1)
             ],
-            help="Space-separated datasets and proportions (e.g., iam:1 mathwriting:0.3)",
+            help="Space-separated datasets, proportions and flags: p for preload and i for indexing (e.g., iam:1:ip mathwriting:0.3)",
         )
         parser.add_argument(
             "-n",

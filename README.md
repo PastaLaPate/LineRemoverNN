@@ -131,4 +131,8 @@ pixi run lineremovernn gui-infer
 
 Copyright (C) 2026 PastaLaPate.
 
+This project uses:
+Barkeep - Licensed under the Apache License, Version 2.0 by Ozan İrsoy.
+Pugixml - Licensed under the MIT License by Arseny Kapoulkine.
+
 This project is licensed under the GNU Affero General Public License v3 (AGPLv3) - see the [LICENSE](LICENSE) file for details.

@@ -3,15 +3,15 @@ from argparse import Namespace
 from pathlib import Path
 
 import torch
-import torchvision.transforms.v2 as v2
 from torch.amp.autocast_mode import autocast
 from torch.amp.grad_scaler import GradScaler
 from torch.backends import cudnn
 from torch.utils.data import DataLoader
+from torchvision.transforms import v2
 from tqdm import tqdm
 
 from lineremovernn.commands.command import Command
-from lineremovernn.data.pages import PagesDataset
+from lineremovernn.data.pages import Page, PagesDataset, collate_pages
 from lineremovernn.model.lineremover import LineRemovalUNet
 from lineremovernn.utils import logging
 from lineremovernn.utils.consts import DEFAULT_MODELS, DEVICE
@@ -134,6 +134,7 @@ class TrainCommand(Command):
             shuffle=True,
             num_workers=4,
             pin_memory=True,
+            collate_fn=collate_pages,
         )
 
         steps_per_epoch = len(dataloader)
@@ -162,11 +163,12 @@ class TrainCommand(Command):
             model.train()
 
             total_loss = 0
-            bar: tqdm[DataLoader[PagesDataset]] = tqdm(
-                dataloader, desc=f"Epoch {e}", unit="batch"
-            )
+            bar: tqdm = tqdm(dataloader, desc=f"Epoch {e}", unit="batch")
 
-            for r, c in bar:
+            r: torch.Tensor
+            c: torch.Tensor
+            p: Page | None
+            for r, c, p in bar:
                 ruled: torch.Tensor = r.to(DEVICE)
                 clean: torch.Tensor = c.to(DEVICE)
 

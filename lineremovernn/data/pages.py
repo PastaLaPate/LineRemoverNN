@@ -1,7 +1,7 @@
 import os
 import xml.etree.ElementTree as ET
+from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Tuple
 
 import torch
 from torch import Tensor
@@ -41,7 +41,7 @@ class Page:
                 yield line_idx, word, self.boxes[flat_idx]
                 flat_idx += 1
 
-    def lines_with_boxes(self) -> list[list[Tuple["Word", Tensor]]]:
+    def lines_with_boxes(self) -> list[list[tuple["Word", Tensor]]]:
         """Same shape as `lines`, but each entry is (Word, box) instead of just Word."""
         out = []
         flat_idx = 0
@@ -52,6 +52,17 @@ class Page:
                 flat_idx += 1
             out.append(line_out)
         return out
+
+
+def collate_pages(
+    batch: Sequence[tuple[Tensor, Tensor, Page | None]],
+) -> tuple[Tensor, Tensor, list[Page | None]]:
+    ruled_list, clean_list, pages_list = zip(*batch)
+
+    ruled_batch = torch.stack(ruled_list, dim=0)
+    clean_batch = torch.stack(clean_list, dim=0)
+
+    return ruled_batch, clean_batch, list(pages_list)
 
 
 class PagesDataset(TorchDataset):
@@ -69,7 +80,9 @@ class PagesDataset(TorchDataset):
         self.load_label = load_label
 
         # Check dataset validity
-        if not len(os.listdir(self.ruled_path)) == len(os.listdir(self.clean_path)):
+        if not len(os.listdir(self.ruled_path)) == len(
+            os.listdir(self.clean_path)
+        ):
             raise ValueError(
                 "Clean and ruled input directories must have the same number of files."
             )
@@ -77,7 +90,7 @@ class PagesDataset(TorchDataset):
     def __len__(self) -> int:
         return len(os.listdir(self.ruled_path))
 
-    def __getitem__(self, idx) -> Tuple[Tensor, Tensor, Page | None]:
+    def __getitem__(self, idx) -> tuple[Tensor, Tensor, Page | None]:
         ruled_img_path = self.ruled_path / f"{idx}.jpg"
         clean_img_path = self.clean_path / f"{idx}.jpg"
         ruled = decode_image(str(ruled_img_path), ImageReadMode.GRAY)
@@ -89,10 +102,14 @@ class PagesDataset(TorchDataset):
             if self.transform:
                 ruled, clean = self.transform(ruled, clean)
 
-            return (ruled, clean, None)
+            return (
+                ruled,
+                clean,
+                None,
+            )
         label_path = self.labels_path / f"{idx}.xml"
         if not label_path.exists():
-            logger.warning("Couldnt load ", idx, "'s metadata file.")
+            logger.warning("Couldnt load %d's metadata file.", idx)
             if self.transform:
                 ruled, clean = self.transform(ruled, clean)
 

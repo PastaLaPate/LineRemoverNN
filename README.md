@@ -14,7 +14,7 @@
 This repos uses PyTorch to remove ruled lines from an image while reconstructing overlapping characters with lines.
 The goal of this model is to make easier the word recognition from OCR.
 
-![Example](.github/Figure_1.png)
+![Example results](.github/Figure_1.png)
 
 ## Installation
 
@@ -79,7 +79,7 @@ pixi run lineremovernn generate-pages [OPTIONS]
 | `-w`, `--workers`          | `INT`     | CPU threads to use (default: all cores)                                                                                     |
 | `-db`, `--debug`           | `FLAG`    | Debug how long each process of page generating is.                                                                          |
 
-### Train Model 🧑‍🏫
+### Train Model
 
 ```bash
 pixi run lineremovernn train [OPTIONS]
@@ -118,6 +118,18 @@ pixi run lineremovernn test
 | `-b`, `--batch-size` | `INT`  | Batch size.               |
 | `-l`, `--loss`       | `FLAG` | Show loss for each image. |
 
+### Preview dataset
+
+```bash
+pixi run lineremovernn preview-dataset
+```
+
+| Option              | Type   | Help                                 |
+| ------------------- | ------ | ------------------------------------ |
+| `-n`, `--n`         | `INT`  | Number of images to test.            |
+| `-d`, `--dataset`   | `STR`  | Dataset to preview available: pages. |
+| `-t`, `--transform` | `FLAG` | Add some random transforms.          |
+
 ## GUI Infer
 
 No python lib for the moment.
@@ -125,6 +137,14 @@ You can use the gui:
 
 ```bash
 pixi run lineremovernn gui-infer
+```
+
+## Development
+
+To force rebuild of CPP bindings (src/lineremovernn_ext), use:
+
+```bash
+pixi run build
 ```
 
 ## License

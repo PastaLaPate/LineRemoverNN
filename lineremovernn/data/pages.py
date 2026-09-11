@@ -164,7 +164,7 @@ class PagesDataset(TorchDataset):
             w=page_w,
             h=page_h,
             line_height=int(root.attrib["line_height"]),
-            margin_left=int(root.attrib["margin_left"]),
+            margin_left=0,
             brightness=int(root.attrib["brightness"]),
             lines=lines_list,
             boxes=boxes,

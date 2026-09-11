@@ -6,6 +6,9 @@
 [![License](https://img.shields.io/badge/License-BSD_3-blue)](#license)
 [![issues - LineRemoverNN](https://img.shields.io/github/issues/PastaLaPate/LineRemoverNN)](https://github.com/PastaLaPate/LineRemoverNN/issues)
 
+> [!CAUTION]
+> This is the legacy version of the project. It is unmaintained, has poor code quality and legacy project management. See `master` for updated version.
+
 ## Introduction
 
 This repos uses PyTorch to remove ruled lines from an image while reconstructing overlapping characters with lines.

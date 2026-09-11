@@ -3,12 +3,12 @@ from pathlib import Path
 
 import matplotlib.pyplot as plt
 import torch
-import torchvision.transforms.v2 as v2
 from torch.amp.autocast_mode import autocast
 from torch.utils.data import DataLoader
+from torchvision.transforms import v2
 
 from lineremovernn.commands.command import Command
-from lineremovernn.data.pages import PagesDataset
+from lineremovernn.data.pages import PagesDataset, collate_pages
 from lineremovernn.model.lineremover import LineRemovalUNet
 from lineremovernn.utils import logging
 from lineremovernn.utils.consts import DEFAULT_MODELS, DEVICE
@@ -71,7 +71,9 @@ class TestCommand(Command):
         if lm is not None:
             latest_model = load_model(lm[1], training=False)
             model.load_state_dict(latest_model.model_state)
-            logger.info(f"Loaded model weights from epoch {latest_model.stats.epoch}")
+            logger.info(
+                f"Loaded model weights from epoch {latest_model.stats.epoch}"
+            )
         else:
             logger.warning(
                 "No saved model found. Running inference with random weights!"
@@ -80,33 +82,31 @@ class TestCommand(Command):
         model.eval()
 
         transforms = v2.Compose(
-            (
-                [
-                    v2.RandomCrop(
-                        (384, 384),
-                        pad_if_needed=True,
-                        fill=0,
-                        padding_mode="constant",
+            [
+                v2.RandomCrop(
+                    (384, 384),
+                    pad_if_needed=True,
+                    fill=0,
+                    padding_mode="constant",
+                ),
+                v2.RandomPerspective(distortion_scale=0.15, p=0.5, fill=0),
+                v2.RandomAffine(
+                    degrees=(-1.5, 1.5),
+                    scale=(
+                        0.75,
+                        1.3,
                     ),
-                    v2.RandomPerspective(distortion_scale=0.15, p=0.5, fill=0),
-                    v2.RandomAffine(
-                        degrees=(-1.5, 1.5),
-                        scale=(
-                            0.75,
-                            1.3,
-                        ),
-                        shear=(-4, 4),
-                        fill=0,
-                    ),
-                    v2.RandomCrop(
-                        (256, 256),
-                        pad_if_needed=True,
-                        fill=0,
-                        padding_mode="constant",
-                    ),
-                    v2.ToDtype(torch.float32, scale=True),
-                ]
-            )
+                    shear=(-4, 4),
+                    fill=0,
+                ),
+                v2.RandomCrop(
+                    (256, 256),
+                    pad_if_needed=True,
+                    fill=0,
+                    padding_mode="constant",
+                ),
+                v2.ToDtype(torch.float32, scale=True),
+            ]
         )
 
         dataset = PagesDataset(transforms)
@@ -116,6 +116,7 @@ class TestCommand(Command):
             shuffle=True,
             num_workers=4,
             pin_memory=True,
+            collate_fn=collate_pages,
         )
 
         inputs = []
@@ -126,7 +127,7 @@ class TestCommand(Command):
         logger.info(f"Gathering {args.n} samples for visual inference...")
         with torch.no_grad():
             i = 0
-            for r, c in dataloader:
+            for r, c, p in dataloader:
                 i += 1
                 ruled = r.to(DEVICE)
 
@@ -146,7 +147,9 @@ class TestCommand(Command):
                     if args.loss:
                         loss = criterion(pred[i], clean[i])
                         losses.append(loss.item())
-                        logger.info(f"Sample {i} generated. Loss : {loss.item()}")
+                        logger.info(
+                            f"Sample {i} generated. Loss : {loss.item()}"
+                        )
 
                 if len(inputs) >= args.n:
                     break
@@ -159,7 +162,9 @@ class TestCommand(Command):
 
             def tensor_to_np(tensor):
                 np_img = tensor.permute(1, 2, 0).numpy()
-                if np_img.shape[-1] == 1:  # If grayscale, squeeze the channel dimension
+                if (
+                    np_img.shape[-1] == 1
+                ):  # If grayscale, squeeze the channel dimension
                     np_img = np_img.squeeze(-1)
                 return np_img
 
@@ -180,7 +185,7 @@ class TestCommand(Command):
 
             # Row 1: Model Prediction
             axes[1, col_idx].set_title(
-                f"Pred {col_idx + 1} Loss : {'{:.4f}'.format(losses[col_idx])}"
+                f"Pred {col_idx + 1} Loss : {f'{losses[col_idx]:.4f}'}"
                 if args.loss
                 else f"Pred {col_idx + 1}",
                 fontsize=12,

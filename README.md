@@ -3,12 +3,11 @@
 [![PastaLaPate - LineRemoverNN](https://img.shields.io/static/v1?label=PastaLaPate&message=LineRemoverNN&color=blue&logo=github)](https://github.com/PastaLaPate/LineRemoverNN "Go to GitHub repo")
 [![stars - LineRemoverNN](https://img.shields.io/github/stars/PastaLaPate/LineRemoverNN?style=social)](https://github.com/PastaLaPate/LineRemoverNN)
 [![forks - LineRemoverNN](https://img.shields.io/github/forks/PastaLaPate/LineRemoverNN?style=social)](https://github.com/PastaLaPate/LineRemoverNN)
-[![License](https://img.shields.io/badge/License-BSD_3-blue)](#license)
+[![License](https://img.shields.io/badge/License-AGPLv3-blue)](#license)
 [![issues - LineRemoverNN](https://img.shields.io/github/issues/PastaLaPate/LineRemoverNN)](https://github.com/PastaLaPate/LineRemoverNN/issues)
 
-> [!CAUTION]
-> This V2 version of the project is a complete rewrite from scratch. It uses a more modern stack, a single main file instead of individual files and better file tree.
-> It is experimental and subject to changes. The current model already seems more powerful than the last one but I still need to train it for longer and make it even stronger against big page transformations.
+> [!NOTE]
+> This is the new v2 version of the project (complete rewrite), to see the old version go to the `legacy` branch.
 
 ## Introduction
 
@@ -21,9 +20,9 @@ The goal of this model is to make easier the word recognition from OCR.
 
 ### Prerequisites
 
-- [Pixi](https://pixi.prefix.dev/latest/installation/)
-- [UV](https://docs.astral.sh/uv/getting-started/installation/)
-- NVIDIA GPU with conda 13, I don't have AMD GPU to support ROMc
+- [Pixi](https://pixi.prefix.dev/latest/installation/) (cpp dependencies manager)
+- [UV](https://docs.astral.sh/uv/getting-started/installation/) (python dependencies manager)
+- Nvidia GPU with CUDA support (I cant test AMD ROCm)
 
 ### Setup Environment
 
@@ -46,45 +45,87 @@ These commands automatically download and extract popular datasets.
 
 #### IAM
 
-`pixi run lineremovernn download-dataset -d iam`
+```bash
+pixi run lineremovernn download-dataset -d iam
+```
 
 #### Mathwriting
 
-`pixi run lineremovernn download-dataset -d mathwriting`
+```bash
+pixi run lineremovernn download-dataset -d mathwriting
+```
 
 #### AI2D
 
-`pixi run lineremovernn download-dataset -d ai2d`
+```bash
+pixi run lineremovernn download-dataset -d ai2d
+```
 
 ### Generate synthetic pages
 
-`uv run lineremovernn generate-pages`
-Arguments:
--n, --n: Number of images to generate
---datasets: Space-separated datasets and proportions (e.g., iam:1 mathwriting:0.3)
--a, --arc: Use arcs instead of lines.
--mw, --max-warp: Maximum perspective warp factor for word crops (0.0 to disable, old default was 0.3)
--il, --imperfect-lines: Add noise to lines
--m, --save-metadata: Export ground-truth word layout coordinates as XML files
--d, --docs: Make document like layouts instead of raw lines
--w, --workers: CPU worker processes (default: all cores)
+```bash
+pixi run lineremovernn generate-pages [OPTIONS]
+```
 
-## Train Model 🧑‍🏫
+| Option                     | Type      | Help                                                                                                                        |
+| -------------------------- | --------- | --------------------------------------------------------------------------------------------------------------------------- |
+| `-n`, `--n`                | `INTEGER` | Number of images to generate                                                                                                |
+| `--datasets`               | `STRING`  | Space-separated datasets, proportions and flags (`p` for RAM preloading, `i` for indexing). E.g. `iam:1:ip mathwriting:0.3` |
+| `-d`, `--docs`             | `FLAG`    | Make document like layouts instead of one big chunk of paragraph.                                                           |
+| `-a`, `--a`                | `FLAG`    | Use arcs instead of straight lines                                                                                          |
+| `-il`, `--imperfect-lines` | `FLAG`    | Add noise to the lines.                                                                                                     |
+| `-mw`, `--max-warp`        | `FLOAT`   | Maximum perspective warp factor for word crops (0.0 to disable, recommended: 0.15)                                          |
+| `-m`, `--save-metadata`    | `FLAG`    | Export ground-truth word layout coordinates as XML files.                                                                   |
+| `-w`, `--workers`          | `INT`     | CPU threads to use (default: all cores)                                                                                     |
+| `-db`, `--debug`           | `FLAG`    | Debug how long each process of page generating is.                                                                          |
 
-Run `uv run lineremovernn train -e 25 -l -b 6`
-`-l` to load a before trained model (to continue training)
+### Train Model 🧑‍🏫
 
-## Other commands:
+```bash
+pixi run lineremovernn train [OPTIONS]
+```
 
-`uv run lineremovernn ls-models` to list models.
-`uv run lineremovernn model-info` to show the model arch.
-`uv run lineremovernn test -n 5` to test a model agaisnt some dataset pages.
+| Option               | Type   | Help                                            |
+| -------------------- | ------ | ----------------------------------------------- |
+| `-e`, `--epoch`      | `INT`  | Number of epochs to train the model for.        |
+| `-b`, `--batch-size` | `INT`  | Batch size.                                     |
+| `-l`, `--load`       | `FLAG` | Continue training of latest model.              |
+| `-ex`, `--extended`  | `FLAG` | Use extended dataset augmentation & transforms. |
 
-## Usage
+## Utils commands:
+
+### List available models
+
+```bash
+pixi run lineremovernn ls-models
+```
+
+### Model layers
+
+```bash
+pixi run lineremovernn model-info
+```
+
+### Test model
+
+```bash
+pixi run lineremovernn test
+```
+
+| Option               | Type   | Help                      |
+| -------------------- | ------ | ------------------------- |
+| `-n`, `--n`          | `INT`  | Number of images to test. |
+| `-b`, `--batch-size` | `INT`  | Batch size.               |
+| `-l`, `--loss`       | `FLAG` | Show loss for each image. |
+
+## GUI Infer
 
 No python lib for the moment.
 You can use the gui:
-`uv run lineremovernn gui-infer`
+
+```bash
+pixi run lineremovernn gui-infer
+```
 
 ## License
 

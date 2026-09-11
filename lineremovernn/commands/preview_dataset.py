@@ -1,10 +1,10 @@
 import random
 from argparse import Namespace
 
-import matplotlib.patches as patches
 import matplotlib.pyplot as plt
 import torch
-import torchvision.transforms.v2 as v2
+from matplotlib import patches
+from torchvision.transforms import v2
 
 from lineremovernn.commands.command import Command
 from lineremovernn.data.pages import PagesDataset
@@ -54,7 +54,9 @@ class PreviewDatasetCommand(Command):
                             fill=0,
                             padding_mode="constant",
                         ),
-                        v2.RandomPerspective(distortion_scale=0.15, p=0.5, fill=0),
+                        v2.RandomPerspective(
+                            distortion_scale=0.15, p=0.5, fill=0
+                        ),
                         v2.RandomAffine(
                             degrees=(-1.5, 1.5),
                             scale=(
@@ -81,7 +83,9 @@ class PreviewDatasetCommand(Command):
                 raise Exception("Not enough pages in the dataset.")
 
             indices = random.sample(range(len(pages)), min(args.n, len(pages)))
-            fig, axes = plt.subplots(2, args.n, figsize=(5 * args.n, 12), squeeze=False)
+            fig, axes = plt.subplots(
+                2, args.n, figsize=(5 * args.n, 12), squeeze=False
+            )
 
             for col_idx, idx in enumerate(indices):
                 blank, ruled, page = pages[idx]
@@ -144,12 +148,12 @@ class PreviewDatasetCommand(Command):
                                     display_text,
                                     color="blue",
                                     fontsize=7,
-                                    bbox=dict(
-                                        facecolor="white",
-                                        alpha=0.6,
-                                        pad=0.5,
-                                        edgecolor="none",
-                                    ),
+                                    bbox={
+                                        "facecolor": "white",
+                                        "alpha": 0.6,
+                                        "pad": 0.5,
+                                        "edgecolor": "none",
+                                    },
                                 )
 
                 axes[0][col_idx].axis("off")

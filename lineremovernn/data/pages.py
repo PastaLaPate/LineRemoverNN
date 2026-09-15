@@ -2,6 +2,7 @@ import os
 import xml.etree.ElementTree as ET
 from collections.abc import Sequence
 from dataclasses import dataclass
+from enum import IntEnum, auto
 
 import torch
 from torch import Tensor
@@ -22,6 +23,20 @@ class Word:
     transcript: str
 
 
+class BlockTypes(IntEnum):
+    TITLE = auto()
+    CAT_TITLE = auto()
+    PARAGRAPH = auto()
+    SCHEMA = auto()
+    SKIP_LINE = auto()
+
+
+@dataclass
+class Block:
+    _type: BlockTypes
+    lines: list[list[Word]]
+
+
 @dataclass
 class Page:
     idx: int
@@ -30,27 +45,29 @@ class Page:
     line_height: int
     margin_left: int
     brightness: int
-    lines: list[list[Word]]
+    blocks: list[Block]
     boxes: tv_tensors.BoundingBoxes
 
     def words_with_boxes(self):
         """Yield (line_idx, Word, box) for every word, box already split per-line."""
         flat_idx = 0
-        for line_idx, line in enumerate(self.lines):
-            for word in line:
-                yield line_idx, word, self.boxes[flat_idx]
-                flat_idx += 1
+        for block in self.blocks:
+            for line_idx, line in enumerate(block.lines):
+                for word in line:
+                    yield line_idx, word, self.boxes[flat_idx]
+                    flat_idx += 1
 
     def lines_with_boxes(self) -> list[list[tuple["Word", Tensor]]]:
         """Same shape as `lines`, but each entry is (Word, box) instead of just Word."""
         out = []
         flat_idx = 0
-        for line in self.lines:
-            line_out = []
-            for word in line:
-                line_out.append((word, self.boxes[flat_idx]))
-                flat_idx += 1
-            out.append(line_out)
+        for block in self.blocks:
+            for line in block.lines:
+                line_out = []
+                for word in line:
+                    line_out.append((word, self.boxes[flat_idx]))
+                    flat_idx += 1
+                out.append(line_out)
         return out
 
 
@@ -117,10 +134,11 @@ class PagesDataset(TorchDataset):
         tree = ET.parse(label_path)
         root = tree.getroot()
 
-        lines_list: list[list[Word]] = []
+        blocks: list[Block] = []
         boxes_list: list[list[int]] = []  # flat, XYWH, reading order
 
         for block_elem in root.findall("block"):
+            lines_list: list[list[Word]] = []
             for line_elem in block_elem.findall("line"):
                 words_list = []
                 for word_elem in line_elem.findall("word"):
@@ -141,6 +159,7 @@ class PagesDataset(TorchDataset):
                     )
 
                 lines_list.append(words_list)
+            blocks.append(Block(_type=BlockTypes.PARAGRAPH, lines=lines_list))
 
         page_w = int(root.attrib["w"])
         page_h = int(root.attrib["h"])
@@ -167,7 +186,7 @@ class PagesDataset(TorchDataset):
             line_height=int(root.attrib["line_height"]),
             margin_left=0,
             brightness=int(root.attrib["brightness"]),
-            lines=lines_list,
+            blocks=blocks,
             boxes=boxes,
         )
 

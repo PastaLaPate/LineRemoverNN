@@ -92,7 +92,7 @@ class PreviewDatasetCommand(Command):
                 axes[0][col_idx].imshow(blank.squeeze().numpy(), cmap="gray")
                 axes[1][col_idx].imshow(ruled.squeeze().numpy(), cmap="gray")
 
-                if page and page.lines:
+                if page and page.blocks:
                     for line in page.lines_with_boxes():
                         if not line:
                             continue

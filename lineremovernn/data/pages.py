@@ -120,26 +120,27 @@ class PagesDataset(TorchDataset):
         lines_list: list[list[Word]] = []
         boxes_list: list[list[int]] = []  # flat, XYWH, reading order
 
-        for line_elem in root.findall("line"):
-            words_list = []
-            for word_elem in line_elem.findall("word"):
-                word = Word(
-                    idx=int(word_elem.attrib["idx"]),
-                    dataset_idx=int(word_elem.attrib["dataset_idx"]),
-                    dataset=word_elem.attrib["dataset"],
-                    transcript=word_elem.text if word_elem.text else "",
-                )
-                words_list.append(word)
-                boxes_list.append(
-                    [
-                        int(word_elem.attrib["x"]),
-                        int(word_elem.attrib["y"]),
-                        int(word_elem.attrib["w"]),
-                        int(word_elem.attrib["h"]),
-                    ]
-                )
+        for block_elem in root.findall("block"):
+            for line_elem in block_elem.findall("line"):
+                words_list = []
+                for word_elem in line_elem.findall("word"):
+                    word = Word(
+                        idx=int(word_elem.attrib["idx"]),
+                        dataset_idx=int(word_elem.attrib["dataset_idx"]),
+                        dataset=word_elem.attrib["dataset_id"],
+                        transcript=word_elem.text if word_elem.text else "",
+                    )
+                    words_list.append(word)
+                    boxes_list.append(
+                        [
+                            int(word_elem.attrib["x"]),
+                            int(word_elem.attrib["y"]),
+                            int(word_elem.attrib["w"]),
+                            int(word_elem.attrib["h"]),
+                        ]
+                    )
 
-            lines_list.append(words_list)
+                lines_list.append(words_list)
 
         page_w = int(root.attrib["w"])
         page_h = int(root.attrib["h"])

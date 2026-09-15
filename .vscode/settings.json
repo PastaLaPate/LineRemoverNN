@@ -1,6 +1,6 @@
 {
   "python.analysis.autoImportCompletions": true,
-  "python.languageServer": "Pylance",
+  "python.languageServer": "None",
   "editor.codeActionsOnSave": {
     "source.fixAll.ruff": "always",
     "source.organizeImports.ruff": "always"

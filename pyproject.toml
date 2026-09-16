@@ -8,10 +8,9 @@ dependencies = [
   "colorama>=0.4.6",
   "distro>=1.9.0",
   "matplotlib>=3.10.8",
+  "opencv-python<5.0",
   "pillow>=12.1.1",
-  "pre-commit>=4.6.0",
   "pycairo>=1.29.0",
-  "ruff>=0.15.16",
   "torch>=2.9.0",
   "torchinfo>=1.8.0",
   "torchvision==0.24.0",
@@ -26,7 +25,8 @@ lineremovernn = "lineremovernn.__main__:main"
 dev = [
   "cmake>=4.3.2",
   "nanobind>=2.0",
-  "pre-commit>=4.5.1",
+  "pre-commit>=4.6.0",
+  "ruff>=0.15.16",
   "scikit-build-core>=0.12.2",
 ]
 
@@ -35,7 +35,7 @@ requires = ["nanobind>=2.0", "numpy", "scikit-build-core>=0.10"]
 build-backend = "scikit_build_core.build"
 
 [tool.scikit-build]
-build-dir = "build/{wheel_tag}"
+build-dir = "build"
 cmake.build-type = "Debug"
 wheel.packages = ["lineremovernn"]
 
@@ -47,7 +47,7 @@ CMAKE_EXPORT_COMPILE_COMMANDS = "ON"
 default-groups = []
 
 [tool.uv.extra-build-dependencies]
-lineremovernn = ["scikit_build_core"]
+lineremovernn = ["scikit-build-core"]
 
 [tool.uv.workspace]
 members = ["."]

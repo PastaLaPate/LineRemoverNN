@@ -1,6 +1,5 @@
 from lineremovernn.commands.download_dataset import DownloadDatasetCommand
 from lineremovernn.commands.generate_pages import GeneratePagesCPPCommand
-from lineremovernn.commands.generate_pages_python import GeneratePagesCommand
 from lineremovernn.commands.gui import GUIInferCommand
 from lineremovernn.commands.list_models import ListModelsCommand
 from lineremovernn.commands.model_info import ModelInfoCommand
@@ -12,7 +11,6 @@ from .command import Command
 
 commands: list[Command] = [
     DownloadDatasetCommand(),
-    GeneratePagesCommand(),
     PreviewDatasetCommand(),
     ModelInfoCommand(),
     TrainCommand(),

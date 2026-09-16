@@ -16,13 +16,6 @@ find_package(OpenCV REQUIRED COMPONENTS core imgproc photo imgcodecs)
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(CAIRO REQUIRED IMPORTED_TARGET cairo)
 
-execute_process(
-  COMMAND "${Python_EXECUTABLE}" -c "import numpy; print(numpy.get_include())"
-  OUTPUT_VARIABLE NUMPY_INCLUDE_DIR
-  OUTPUT_STRIP_TRAILING_WHITESPACE
-  COMMAND_ERROR_IS_FATAL ANY
-)
-
 nanobind_add_module(
   _lineremovernn_ext
   NOMINSIZE
@@ -32,15 +25,11 @@ nanobind_add_module(
   src/lineremovernn_ext/datasets/mathwriting.cpp
   src/lineremovernn_ext/datasets/ai2d.cpp
   src/lineremovernn_ext/datasets/factory.cpp
-  src/lineremovernn_ext/utils.hpp
-  src/lineremovernn_ext/pugixml/pugiconfig.hpp
-  src/lineremovernn_ext/pugixml/pugixml.hpp
   src/lineremovernn_ext/pugixml/pugixml.cpp
 )
 
 target_include_directories(_lineremovernn_ext PRIVATE
   src/lineremovernn_ext
-  ${NUMPY_INCLUDE_DIR}
   ${OpenCV_INCLUDE_DIRS}
 )
 
@@ -49,10 +38,7 @@ target_compile_options(_lineremovernn_ext PRIVATE
 )
 
 target_link_libraries(_lineremovernn_ext PRIVATE
-  opencv_core
-  opencv_imgproc
-  opencv_photo
-  opencv_imgcodecs
+  ${OpenCV_LIBS}
   PkgConfig::CAIRO
 )
 

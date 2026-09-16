@@ -14,11 +14,13 @@ zlib = "*"
 
 [pypi-dependencies]
 lineremovernn = { path = ".", editable = true }
+scikit-build-core = ">=0.12.2"
+nanobind = ">=2.0"
 
 [tasks]
-build = "uv pip install --no-deps -e ."
+build = "uv pip install --no-build-isolation --no-deps -e ."
 lineremovernn = { cmd = "lineremovernn", depends-on = ["build"] }
 dev = { cmd = "lineremovernn", depends-on = ["build"] }
 hooks = "uv run pre-commit install"
-link-compile-commands = "sh -c 'ln -sf $(ls -d build/* | head -n1)/compile_commands.json compile_commands.json'"
+link-compile-commands = "ln -sf build/compile_commands.json compile_commands.json"
 clangd-setup = { cmd = "pixi run link-compile-commands", depends-on = ["build"] }

@@ -70,13 +70,12 @@ class CachedDataset(Dataset):
         try:
             with open(path, "rb") as f:
                 return f.read()
-        except Exception:
+        except FileNotFoundError:
             return None
 
     @abstractmethod
     def _load_metadata(self):
         """Loads the dataset metadata (e.g., file paths, labels) into memory, but not the raw bytes. Populates self.assets."""
-        pass
 
     def preload(self) -> None:
         """Preloads all unique images directly into this instance's static cache storage."""
@@ -163,5 +162,6 @@ class DownloadableDataset(Dataset):
         pass
 
 
-class TorchDataset(Dataset, TorchADataset):
-    pass
+class TorchDataset(Dataset, TorchADataset, ABC):
+    @abstractmethod
+    def __getitem__(self, idx): ...

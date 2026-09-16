@@ -28,7 +28,7 @@ The goal of this model is to make easier the word recognition from OCR.
 
 ```bash
 # Install CMake, opencv, cairo, compile cpp etc...
-pixi run sync
+pixi install
 
 # Install pre-commit hooks
 pixi run hooks
@@ -62,6 +62,10 @@ pixi run lineremovernn download-dataset -d ai2d
 ```
 
 ### Generate synthetic pages
+
+
+> [!NOTE]
+> Using IAM's dataset RAM Preloading + Indexing if you can can speed up generation by ~300% (~100ms per page to ~28ms).
 
 ```bash
 pixi run lineremovernn generate-pages [OPTIONS]

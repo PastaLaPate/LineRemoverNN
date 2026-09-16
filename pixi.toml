@@ -11,6 +11,7 @@ expat = "*"
 opencv = ">=4.0.0,<5.0.0"
 pkg-config = "*"
 zlib = "*"
+pre-commit = ">=4.6.2,<5"
 
 [pypi-dependencies]
 lineremovernn = { path = ".", editable = true }

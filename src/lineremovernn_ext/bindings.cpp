@@ -26,6 +26,59 @@ NB_MODULE(_lineremovernn_ext, m) {
       .def_rw("path", &DatasetS::path)
       .def_rw("proportion", &DatasetS::proportion);
 
+  nb::enum_<BlockType>(m, "BLOCK_TYPES")
+      .value("TITLE", BlockType::Title)
+      .value("CAT_TITLE", BlockType::CatTitle)
+      .value("PARAGRAPH", BlockType::Paragraph)
+      .value("SCHEMA", BlockType::Schema)
+      .value("SKIP_LINE", BlockType::SkipLine)
+      .export_values();
+
+  nb::class_<PageSettings>(m, "PageSettings")
+      .def(nb::init<bool, bool, int, int, int, int, float, bool, bool>(),
+           nb::arg("document"), nb::arg("save_labels"), nb::arg("w"),
+           nb::arg("h"), nb::arg("line_height"), nb::arg("brightness"),
+           nb::arg("max_warp"), nb::arg("imperfect_lines"), nb::arg("arc"))
+      .def_ro("document", &PageSettings::document)
+      .def_ro("save_labels", &PageSettings::save_labels)
+      .def_ro("w", &PageSettings::w)
+      .def_ro("h", &PageSettings::h)
+      .def_ro("line_height", &PageSettings::line_height)
+      .def_ro("brightness", &PageSettings::brightness)
+      .def_ro("max_warp", &PageSettings::max_warp)
+      .def_ro("imperfect_lines", &PageSettings::imperfect_lines)
+      .def_ro("arc", &PageSettings::arc);
+
+  nb::class_<PageAsset>(m, "PageAsset")
+      .def(nb::init<std::string, int, int, int, int, int, int, float,
+                    std::string>(),
+           nb::arg("dataset_id"), nb::arg("idx"), nb::arg("page_idx"),
+           nb::arg("w"), nb::arg("h"), nb::arg("x"), nb::arg("y"),
+           nb::arg("scale"), nb::arg("transcript"))
+      .def_ro("dataset_id", &PageAsset::dataset_id)
+      .def_ro("idx", &PageAsset::idx)
+      .def_ro("page_idx", &PageAsset::page_idx)
+      .def_ro("w", &PageAsset::w)
+      .def_ro("h", &PageAsset::h)
+      .def_ro("x", &PageAsset::x)
+      .def_ro("y", &PageAsset::y)
+      .def_ro("scale", &PageAsset::scale)
+      .def_ro("transcript", &PageAsset::transcript);
+
+  nb::class_<LayoutBlock>(m, "LayoutBlock")
+      .def(nb::init<BlockType, int, int, int, float, int,
+                    std::vector<std::vector<PageAsset>>>(),
+           nb::arg("type"), nb::arg("y_start"), nb::arg("height"),
+           nb::arg("n_lines"), nb::arg("schema_x_offset"),
+           nb::arg("line_skipped"), nb::arg("assets"))
+      .def_ro("type", &LayoutBlock::type)
+      .def_ro("y_start", &LayoutBlock::y_start)
+      .def_ro("height", &LayoutBlock::height)
+      .def_ro("n_lines", &LayoutBlock::n_lines)
+      .def_ro("schema_x_offset", &LayoutBlock::schema_x_offset)
+      .def_ro("line_skipped", &LayoutBlock::line_skipped)
+      .def_ro("assets", &LayoutBlock::assets);
+
   m.def("generate_pages", &generate_pages, "target"_a, "datasets"_a, "n"_a = 5,
         "use_arc"_a = true, "document"_a = true, "max_warp"_a = .1,
         "imperfect_lines"_a = true, "save_xml"_a = false, "debug"_a = false,

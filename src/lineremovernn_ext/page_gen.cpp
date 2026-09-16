@@ -36,43 +36,6 @@ namespace bk = barkeep;
 using namespace std::chrono_literals;
 using namespace cv;
 
-enum class BlockType { Title, CatTitle, Paragraph, Schema, SkipLine };
-
-struct PageSettings {
-  bool document;
-  bool save_labels;
-  int w;
-  int h;
-  int line_height;
-  int brightness; // per page
-
-  float max_warp;
-
-  // Lines params
-  bool imperfect_lines;
-  bool arc;
-};
-
-struct PageAsset {
-  int idx;
-  int page_idx; // global asset index, from left to right, top to bottom
-  std::string dataset_id;
-  int w, h, x, y;
-  float scale;
-
-  // metadata
-  std::string transcript;
-};
-
-struct LayoutBlock {
-  BlockType type;
-  int y_start, height;   // Common Params in pixels
-  int n_lines;           // Paragraph Param
-  float schema_x_offset; // Schema 0.0 = left, .5 = center, 1.0 = right
-  int line_skipped;      // SkipLine
-  std::vector<std::vector<PageAsset>> assets;
-};
-
 std::atomic<bool> shutdown_requested(false);
 
 void signal_handler(int signal) {
@@ -529,9 +492,9 @@ void select_assets(
         }
 
         line.push_back(
-            {.idx = (int)((offsets[dataset->id] - 1) % dataset->len()),
+            {.dataset_id = dataset->id,
+             .idx = (int)((offsets[dataset->id] - 1) % dataset->len()),
              .page_idx = page_asset_idx,
-             .dataset_id = dataset->id,
              .w = scaled_w,
              .h = scaled_h,
              .x = x,
@@ -580,9 +543,9 @@ void select_assets(
           }
 
           line.push_back(
-              {.idx = (int)((offsets[dataset->id] - 1) % dataset->len()),
+              {.dataset_id = dataset->id,
+               .idx = (int)((offsets[dataset->id] - 1) % dataset->len()),
                .page_idx = page_asset_idx,
-               .dataset_id = dataset->id,
                .w = scaled_w,
                .h = scaled_h,
                .x = x,
@@ -609,9 +572,9 @@ void select_assets(
       auto &line = block.assets.back();
 
       line.push_back({
+          .dataset_id = dataset->id,
           .idx = (int)((offsets[dataset->id] - 1) % dataset->len()),
           .page_idx = page_asset_idx,
-          .dataset_id = dataset->id,
           .w = w,
           .h = h,
           .x = offset,

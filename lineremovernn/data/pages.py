@@ -15,7 +15,7 @@ from lineremovernn.utils import logging
 logger = logging.get_logger("PagesDataset")
 
 
-@dataclass
+@dataclass(slots=True)
 class Word:
     idx: int
     dataset_idx: int
@@ -31,13 +31,13 @@ class BlockTypes(IntEnum):
     SKIP_LINE = auto()
 
 
-@dataclass
+@dataclass(slots=True)
 class Block:
     _type: BlockTypes
     lines: list[list[Word]]
 
 
-@dataclass
+@dataclass(slots=True)
 class Page:
     idx: int
     w: int

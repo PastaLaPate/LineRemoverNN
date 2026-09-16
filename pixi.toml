@@ -4,21 +4,21 @@ channels = ["conda-forge"]
 platforms = ["linux-64"]
 
 [dependencies]
-opencv = ">=4.0.0,<5.0.0"
 cairo = "*"
-expat = "*"
-pkg-config = "*"
 cmake = "*"
 compilers = "*"
+expat = "*"
+opencv = ">=4.0.0,<5.0.0"
+pkg-config = "*"
+zlib = "*"
 
 [pypi-dependencies]
+lineremovernn = { path = ".", editable = true }
 
 [tasks]
-sync = "uv sync --locked --all-extras --dev --no-install-project"
-lineremovernn = "uv run lineremovernn"
-dev = "uv run lineremovernn"
+build = "uv pip install --no-deps -e ."
+lineremovernn = { cmd = "lineremovernn", depends-on = ["build"] }
+dev = { cmd = "lineremovernn", depends-on = ["build"] }
 hooks = "uv run pre-commit install"
-build = { cmd = "uv pip install --no-build-isolation -e .", depends-on = ["sync"] }
-configure-clangd = "cmake -S . -B build/clangd -DPython_EXECUTABLE=$(which python) -Dnanobind_DIR=$(python -c 'import nanobind; print(nanobind.cmake_dir())') -DCMAKE_EXPORT_COMPILE_COMMANDS=ON"
-link-compile-commands = "ln -sf build/clangd/compile_commands.json compile_commands.json"
-clangd-setup = { depends-on = ["configure-clangd", "link-compile-commands"] }
+link-compile-commands = "sh -c 'ln -sf $(ls -d build/* | head -n1)/compile_commands.json compile_commands.json'"
+clangd-setup = { cmd = "pixi run link-compile-commands", depends-on = ["build"] }

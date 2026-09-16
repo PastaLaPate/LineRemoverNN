@@ -8,7 +8,6 @@ dependencies = [
   "colorama>=0.4.6",
   "distro>=1.9.0",
   "matplotlib>=3.10.8",
-  "opencv-python>=4.13.0.9,<5.0.0.0",
   "pillow>=12.1.1",
   "pre-commit>=4.6.0",
   "pycairo>=1.29.0",
@@ -46,6 +45,9 @@ CMAKE_EXPORT_COMPILE_COMMANDS = "ON"
 
 [tool.uv]
 default-groups = []
+
+[tool.uv.extra-build-dependencies]
+lineremovernn = ["scikit_build_core"]
 
 [tool.uv.workspace]
 members = ["."]

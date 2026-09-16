@@ -41,6 +41,7 @@ nanobind_add_module(
 target_include_directories(_lineremovernn_ext PRIVATE
   src/lineremovernn_ext
   ${NUMPY_INCLUDE_DIR}
+  ${OpenCV_INCLUDE_DIRS}
 )
 
 target_compile_options(_lineremovernn_ext PRIVATE

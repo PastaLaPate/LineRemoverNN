@@ -47,25 +47,6 @@ void signal_handler(int signal) {
   }
 }
 
-Dataset *get_random_dataset(
-    const std::map<DatasetType, std::vector<std::unique_ptr<Dataset>>>
-        &datasets_by_type,
-    std::initializer_list<DatasetType> types, std::mt19937 &rng) {
-  std::vector<Dataset *> candidates;
-  std::vector<float> weights;
-  for (auto type : types) {
-    for (const auto &d : datasets_by_type.at(type)) {
-      candidates.push_back(d.get());
-      weights.push_back(d->proportion);
-    }
-  }
-  if (candidates.empty())
-    throw std::runtime_error("No datasets for requested types");
-
-  std::discrete_distribution<size_t> dist(weights.begin(), weights.end());
-  return candidates[dist(rng)];
-}
-
 void add_random_perspective(const Mat &img, Mat &transformed, float max_warp,
                             int target_height) {
   if (max_warp <= 0.0f) {

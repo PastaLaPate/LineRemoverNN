@@ -46,6 +46,12 @@ void select_assets(const PageSettings &settings, Layout &layout,
                    const DatasetGroups &datasets) {
   SelectionState state;
 
+  for (auto const &[k, sub_datasets] : datasets) {
+    for (auto const &d : sub_datasets) {
+      state.offsets[d->id] = ThreadRandom::rand_int(0, d->len() - 1);
+    }
+  }
+
   for (auto &block : layout) {
     switch (block.type) {
     case BlockType::Title:

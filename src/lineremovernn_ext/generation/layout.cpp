@@ -1,43 +1,8 @@
 #include "layout.h"
 #include "utils/random.h"
+#include <iostream>
 
 Layout generate_document_layout(const PageSettings &settings) {
-  Layout blocks;
-
-  int top_margin = ThreadRandom::rand_int(30, std::min(settings.h, 100));
-  int y = top_margin;
-
-  while (y + settings.line_height <= settings.h) {
-    int remaining = (settings.h - y) / settings.line_height;
-    assert(remaining >= 1 && "rand_int would receive lo < hi");
-
-    int n_lines = ThreadRandom::rand_int(1, std::min(4, remaining));
-    blocks.push_back({.type = BlockType::Paragraph,
-                      .y_start = y,
-                      .height = settings.line_height * n_lines,
-                      .n_lines = n_lines});
-
-    y += settings.line_height * n_lines + ThreadRandom::rand_int(20, 40);
-
-    if (ThreadRandom::rand_float() > 0.5 &&
-        y + settings.line_height < settings.h) {
-      int remaining = (settings.h - y) / settings.line_height;
-      assert(remaining >= 1 && "rand_int would receive lo < hi");
-
-      int n_lines = ThreadRandom::rand_int(1, std::min(4, remaining));
-      blocks.push_back({.type = BlockType::SkipLine,
-                        .y_start = y,
-                        .height = settings.line_height * n_lines,
-                        .line_skipped = n_lines});
-
-      y += settings.line_height * n_lines;
-    }
-  }
-
-  return blocks;
-}
-
-Layout generate_page_layout(const PageSettings &settings) {
   Layout blocks;
 
   int top_margin = ThreadRandom::rand_int(30, std::min(settings.h, 100));
@@ -72,7 +37,7 @@ Layout generate_page_layout(const PageSettings &settings) {
           current_type = BlockType::CatTitle;
           break;
         }
-      } else if (choice < 0.9f) { // 0.1 + 0.8 = 0.8
+      } else if (choice < 0.9f) { // 0.1 + 0.8 = 0.9
         current_type = BlockType::Paragraph;
         break;
       } else { // Remaining 0.1
@@ -128,6 +93,43 @@ Layout generate_page_layout(const PageSettings &settings) {
       blocks.push_back(
           {.type = BlockType::SkipLine, .y_start = y, .line_skipped = 1});
       y += settings.line_height;
+    }
+  }
+
+  return blocks;
+}
+
+Layout generate_page_layout(const PageSettings &settings) {
+
+  Layout blocks;
+
+  int top_margin = ThreadRandom::rand_int(30, std::min(settings.h, 100));
+  int y = top_margin;
+
+  while (y + settings.line_height <= settings.h) {
+    int remaining = (settings.h - y) / settings.line_height;
+    assert(remaining >= 1 && "rand_int would receive lo < hi");
+
+    int n_lines = ThreadRandom::rand_int(1, std::min(4, remaining));
+    blocks.push_back({.type = BlockType::Paragraph,
+                      .y_start = y,
+                      .height = settings.line_height * n_lines,
+                      .n_lines = n_lines});
+
+    y += settings.line_height * n_lines + ThreadRandom::rand_int(20, 40);
+
+    if (ThreadRandom::rand_float() > 0.5 &&
+        y + settings.line_height < settings.h) {
+      int remaining = (settings.h - y) / settings.line_height;
+      assert(remaining >= 1 && "rand_int would receive lo < hi");
+
+      int n_lines = ThreadRandom::rand_int(1, std::min(4, remaining));
+      blocks.push_back({.type = BlockType::SkipLine,
+                        .y_start = y,
+                        .height = settings.line_height * n_lines,
+                        .line_skipped = n_lines});
+
+      y += settings.line_height * n_lines;
     }
   }
 

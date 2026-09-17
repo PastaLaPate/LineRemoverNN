@@ -45,6 +45,7 @@ float get_typical_scale(Dataset &dataset, int target_height,
 void select_assets(const PageSettings &settings, Layout &layout,
                    const DatasetGroups &datasets) {
   SelectionState state;
+
   for (auto &block : layout) {
     switch (block.type) {
     case BlockType::Title:

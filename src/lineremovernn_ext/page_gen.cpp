@@ -1,10 +1,11 @@
 #include "page_gen.h"
 #include "barkeep/barkeep.h"
 #include "datasets/datasets.h"
-#include "datasets/factory.h"
 #include "datasets/utils.h"
+#include "generation/asset_selection.h"
 #include "generation/layout.h"
 #include "pugixml/pugixml.hpp"
+#include "utils/random.h"
 #include <algorithm>
 #include <atomic>
 #include <cairo/cairo.h>
@@ -66,7 +67,7 @@ Dataset *get_random_dataset(
 }
 
 void add_random_perspective(const Mat &img, Mat &transformed, float max_warp,
-                            int target_height, std::mt19937 &rng) {
+                            int target_height) {
   if (max_warp <= 0.0f) {
     float scale = static_cast<float>(target_height) / img.rows;
     int target_width = std::max(1, static_cast<int>(img.cols * scale));
@@ -86,14 +87,13 @@ void add_random_perspective(const Mat &img, Mat &transformed, float max_warp,
   float max_dx = width * max_warp;
   float max_dy = height * max_warp;
 
-  std::uniform_real_distribution<float> dist_x(-max_dx, max_dx);
-  std::uniform_real_distribution<float> dist_y(-max_dy, max_dy);
+  auto dist_x = [&] { return ThreadRandom::rand_int(-max_dx, max_dx); };
+  auto dist_y = [&] { return ThreadRandom::rand_int(-max_dy, max_dy); };
 
   std::vector<Point2f> dst_points = {
-      Point2f(dist_x(rng), dist_y(rng)),
-      Point2f(width + dist_x(rng), dist_y(rng)),
-      Point2f(width + dist_x(rng), height + dist_y(rng)),
-      Point2f(dist_x(rng), height + dist_y(rng))};
+      Point2f(dist_x(), dist_y()), Point2f(width + dist_x(), dist_y()),
+      Point2f(width + dist_x(), height + dist_y()),
+      Point2f(dist_x(), height + dist_y())};
 
   // Compute the perspective transformation matrix (returns a 3x3 CV_64F Mat)
   Mat matrix = getPerspectiveTransform(src_points, dst_points);
@@ -136,22 +136,13 @@ void add_random_perspective(const Mat &img, Mat &transformed, float max_warp,
                   INTER_LINEAR, BORDER_CONSTANT, border_val);
 }
 
-void draw_lines(Mat &img, bool use_arc, bool imperfect_lines,
-                std::mt19937 &rng) {
+void draw_lines(Mat &img, bool use_arc, bool imperfect_lines) {
   int W = img.cols;
   int H = img.rows;
 
-  std::uniform_int_distribution<int> line_spacing_dist(45, 100);
-  std::uniform_int_distribution<int> sub_line_spacing_dist(2, 5);
-  std::uniform_int_distribution<int> rand_color(100, 180);
-  std::uniform_int_distribution<int> rand_sub_color(160, 190);
-  std::uniform_int_distribution<int> rand_lw(1, 3);
-  std::uniform_int_distribution<int> rand_sub_lw(1, 2);
-  std::uniform_int_distribution<int> rand_jitter(-3, 3);
-  std::uniform_real_distribution<float> rand_amp(-15.0f, 15.0f);
+  int line_spacing = ThreadRandom::rand_int(45, 100);
+  int sub = ThreadRandom::rand_int(2, 5);
 
-  int line_spacing = line_spacing_dist(rng);
-  int sub = sub_line_spacing_dist(rng);
   int margin_top = line_spacing;
   int margin_left = line_spacing * 2;
   int n_lines = (H - margin_top) / line_spacing;
@@ -189,11 +180,11 @@ void draw_lines(Mat &img, bool use_arc, bool imperfect_lines,
   }
 
   for (int x_v = 0; x_v < W; x_v += line_spacing) {
-    int darkness = rand_color(rng);
-    int lw = std::max(1, rand_lw(rng) - 1);
+    int darkness = ThreadRandom::rand_int(100, 180);
+    int lw = std::max(1, ThreadRandom::rand_int(1, 3) - 1);
 
     if (use_arc) {
-      float amplitude = rand_amp(rng);
+      float amplitude = ThreadRandom::rand_float(-15.0f, 15.0f);
       for (size_t p = 0; p < pts_buffer_v.size(); ++p) {
         float x_calculated =
             static_cast<float>(x_v) + amplitude * std::sin(pi_t_vals_v[p]);
@@ -215,12 +206,14 @@ void draw_lines(Mat &img, bool use_arc, bool imperfect_lines,
       float y_base = y_group + j * sub_step;
       bool is_main = (j == 0 || j == sub - 1);
 
-      int darkness = is_main ? rand_color(rng) : rand_sub_color(rng);
-      int lw = is_main ? rand_lw(rng) : rand_sub_lw(rng);
-      int y_off = rand_jitter(rng);
+      int darkness = is_main ? ThreadRandom::rand_int(100, 180)
+                             : ThreadRandom::rand_int(160, 190);
+      int lw =
+          is_main ? ThreadRandom::rand_int(1, 3) : ThreadRandom::rand_int(1, 2);
+      int y_off = ThreadRandom::rand_int(-3, 3);
 
       if (use_arc) {
-        float amplitude = rand_amp(rng);
+        float amplitude = ThreadRandom::rand_float(-15.0f, 15.0f);
         for (size_t p = 0; p < pts_buffer_h.size(); ++p) {
           float y_calculated =
               y_base + y_off + amplitude * std::sin(pi_t_vals_h[p]);
@@ -236,10 +229,10 @@ void draw_lines(Mat &img, bool use_arc, bool imperfect_lines,
     }
   }
 
-  int margin_darkness = rand_color(rng) + 20;
-  int margin_lw = rand_lw(rng) + 1;
+  int margin_darkness = ThreadRandom::rand_int(100, 180) + 20;
+  int margin_lw = ThreadRandom::rand_int(1, 3) + 1;
   if (use_arc) {
-    float amplitude = rand_amp(rng);
+    float amplitude = ThreadRandom::rand_float(-15.0f, 15.0f);
     for (size_t p = 0; p < pts_buffer_v.size(); ++p) {
       float x_calculated = static_cast<float>(margin_left) +
                            amplitude * std::sin(pi_t_vals_v[p]);
@@ -255,14 +248,12 @@ void draw_lines(Mat &img, bool use_arc, bool imperfect_lines,
   }
 
   if (imperfect_lines) {
-    std::uniform_int_distribution<int> rand_dots(40, 120);
-    std::uniform_int_distribution<int> rand_x(0, W - 1);
-    std::uniform_int_distribution<int> rand_y(0, H - 1);
-    std::uniform_int_distribution<int> rand_r(1, 4);
-    int num_spots = rand_dots(rng);
+    int num_spots = ThreadRandom::rand_int(40, 120);
     for (int k = 0; k < num_spots; ++k) {
-      circle(img, Point(rand_x(rng), rand_y(rng)), rand_r(rng), Scalar(255),
-             FILLED);
+      circle(img,
+             Point(ThreadRandom::rand_int(0, W - 1),
+                   ThreadRandom::rand_int(0, H - 1)),
+             ThreadRandom::rand_int(1, 4), Scalar(255), FILLED);
     }
   }
 }
@@ -270,13 +261,7 @@ void draw_lines(Mat &img, bool use_arc, bool imperfect_lines,
 Mat render_clean_page(PageSettings settings, std::vector<LayoutBlock> &layout,
                       std::unordered_map<std::string, Dataset *>
                           &datasets, // map<dataset_id, dataset*>
-                      std::mt19937 &rng, bool debug) {
-  auto rand_int = [&](int lo, int hi) {
-    return std::uniform_int_distribution<int>(lo, hi)(rng);
-  };
-  auto rand_float = [&]() {
-    return std::uniform_real_distribution<float>(0.f, 1.f)(rng);
-  };
+                      bool debug) {
   int w = settings.w;
   int h = settings.h;
   int brightness = settings.brightness;
@@ -312,10 +297,10 @@ Mat render_clean_page(PageSettings settings, std::vector<LayoutBlock> &layout,
         asset.transcript = row.transcript;
 
         if (d->type == DatasetType::HandwrittenWords) {
-          add_random_perspective(img, warped, settings.max_warp, asset.h, rng);
+          add_random_perspective(img, warped, settings.max_warp, asset.h);
         } else {
           // It will just scale it without adding perspective
-          add_random_perspective(img, warped, 0, asset.h, rng);
+          add_random_perspective(img, warped, 0, asset.h);
         }
         auto t2 = std::chrono::high_resolution_clock::now();
 
@@ -447,18 +432,17 @@ pugi::xml_document serialize_xml(int page_idx, PageSettings settings,
 }
 
 void generate_page(int idx, PageSettings settings,
-                   std::map<DatasetType, std::vector<std::unique_ptr<Dataset>>>
-                       &datasets_by_type,
-                   const fs::path &clean_dir, const fs::path &ruled_dir,
-                   const fs::path &labels_dir, std::mt19937 &rng, bool debug) {
+                   DatasetGroups &datasets_by_type, const fs::path &clean_dir,
+                   const fs::path &ruled_dir, const fs::path &labels_dir,
+                   bool debug) {
   Layout layout = generate_layout(settings);
 
-  select_assets(settings, layout, datasets_by_type, rng);
+  select_assets(settings, layout, datasets_by_type);
   auto start_time = std::chrono::high_resolution_clock::now();
 
   DatasetLookup lookup = make_dataset_lookup(datasets_by_type);
 
-  Mat clean = render_clean_page(settings, layout, lookup, rng, debug);
+  Mat clean = render_clean_page(settings, layout, lookup, debug);
 
   auto end_time = std::chrono::high_resolution_clock::now();
   std::chrono::duration<double, std::milli> duration_ms = end_time - start_time;
@@ -475,7 +459,7 @@ void generate_page(int idx, PageSettings settings,
 
   Mat ruled = Mat::ones(settings.h, settings.w, CV_8UC1) *
               255; // Start with a white page for ruled version
-  draw_lines(ruled, settings.arc, settings.imperfect_lines, rng);
+  draw_lines(ruled, settings.arc, settings.imperfect_lines);
 
   cv::min(ruled, clean, ruled);
 
@@ -497,13 +481,6 @@ void generate_pages(fs::path target, std::vector<DatasetS> datasets, int n,
   std::signal(SIGINT, signal_handler);
 
   shutdown_requested = false;
-  std::mt19937 rng(std::random_device{}());
-  auto rand_int = [&](int lo, int hi) {
-    return std::uniform_int_distribution<int>(lo, hi)(rng);
-  };
-  auto rand_float = [&]() {
-    return std::uniform_real_distribution<float>(0.f, 1.f)(rng);
-  };
 
   std::cout << std::format("Generating {} pages", n) << std::endl;
   std::cout << std::format("Creating dirs...") << std::endl;
@@ -559,13 +536,6 @@ void generate_pages(fs::path target, std::vector<DatasetS> datasets, int n,
   auto start_time = std::chrono::high_resolution_clock::now();
   for (unsigned int t = 0; t < num_threads; ++t) {
     workers.emplace_back([&]() {
-      std::mt19937 local_rng(std::random_device{}());
-      auto rand_int = [&](int lo, int hi) {
-        return std::uniform_int_distribution<int>(lo, hi)(local_rng);
-      };
-      auto rand_float = [&]() {
-        return std::uniform_real_distribution<float>(0.f, 1.f)(local_rng);
-      };
       while (true) {
         if (shutdown_requested) {
           break;
@@ -581,9 +551,9 @@ void generate_pages(fs::path target, std::vector<DatasetS> datasets, int n,
           int h;
           int line_height;
           if (document) {
-            float aspect_rand = rand_float();
+            float aspect_rand = ThreadRandom::rand_float();
             float aspect;
-            h = rand_int(2500, 3000);
+            h = ThreadRandom::rand_int(2500, 3000);
 
             // Either sqrt(2) aspect (A serie), 17:22 (American letter), or
             // 17:28 (American legal)
@@ -595,11 +565,11 @@ void generate_pages(fs::path target, std::vector<DatasetS> datasets, int n,
               aspect = 17.f / 28.f;
             }
             w = static_cast<int>(std::round(h * aspect));
-            line_height = rand_int(45, 65);
+            line_height = ThreadRandom::rand_int(45, 65);
           } else {
-            w = rand_int(500, 1600);
-            h = rand_int(800, 2000);
-            line_height = rand_int(50, 190);
+            w = ThreadRandom::rand_int(500, 1600);
+            h = ThreadRandom::rand_int(800, 2000);
+            line_height = ThreadRandom::rand_int(50, 190);
           }
 
           PageSettings settings = {.document = document,
@@ -608,12 +578,13 @@ void generate_pages(fs::path target, std::vector<DatasetS> datasets, int n,
                                    .w = w,
                                    .h = h,
                                    .line_height = line_height,
-                                   .brightness = rand_int(220, 255),
+                                   .brightness =
+                                       ThreadRandom::rand_int(220, 255),
                                    .max_warp = max_warp,
                                    .imperfect_lines = imperfect_lines,
                                    .arc = use_arc};
           generate_page(i, settings, datasets_groups, clean_dir, ruled_dir,
-                        labels_dir, local_rng, debug);
+                        labels_dir, debug);
           {
             std::lock_guard<std::mutex> lock(progress_mutex);
             work++;

@@ -2,6 +2,8 @@
 #include "barkeep/barkeep.h"
 #include "datasets/datasets.h"
 #include "datasets/factory.h"
+#include "datasets/utils.h"
+#include "generation/layout.h"
 #include "pugixml/pugixml.hpp"
 #include <algorithm>
 #include <atomic>
@@ -265,330 +267,6 @@ void draw_lines(Mat &img, bool use_arc, bool imperfect_lines,
   }
 }
 
-std::vector<LayoutBlock> generate_document_layout(PageSettings settings,
-                                                  std::mt19937 &rng) {
-  std::vector<LayoutBlock> blocks;
-
-  auto rand_int = [&](int lo, int hi) {
-    return std::uniform_int_distribution<int>(lo, hi)(rng);
-  };
-
-  auto rand_float = [&](float lo, float hi) {
-    return std::uniform_real_distribution<float>(lo, hi)(rng);
-  };
-
-  int top_margin = rand_int(30, std::min(settings.h, 100));
-  int y = top_margin;
-
-  if (rand_float(0.f, 1.f) < 0.66f) {
-    float title_scale = rand_float(1.2f, 1.5f);
-    int title_h = static_cast<int>(settings.line_height * title_scale);
-
-    blocks.push_back({.type = BlockType::Title,
-                      .y_start = y,
-                      .height = title_h,
-                      .n_lines = 1});
-    y += title_h;
-
-    if (y + settings.line_height * 2 <= settings.h) {
-      blocks.push_back(
-          {.type = BlockType::SkipLine, .y_start = y, .line_skipped = 2});
-      y += settings.line_height * 2;
-    }
-  }
-
-  BlockType last_type = BlockType::SkipLine;
-
-  while (y + settings.line_height <= settings.h) {
-
-    BlockType current_type;
-    while (true) {
-      float choice = rand_float(0.f, 1.f);
-      if (choice < 0.1f) {
-        if (last_type != BlockType::CatTitle) {
-          current_type = BlockType::CatTitle;
-          break;
-        }
-      } else if (choice < 0.9f) { // 0.1 + 0.8 = 0.8
-        current_type = BlockType::Paragraph;
-        break;
-      } else { // Remaining 0.1
-        current_type = BlockType::Schema;
-        break;
-      }
-    }
-
-    if (current_type == BlockType::CatTitle) {
-      float cat_scale = rand_float(1.3f, 2.0f);
-      int cat_h = static_cast<int>(settings.line_height * cat_scale);
-
-      if (y + cat_h > settings.h)
-        break;
-
-      blocks.push_back({.type = BlockType::CatTitle,
-                        .y_start = y,
-                        .height = cat_h,
-                        .n_lines = 1});
-      y += cat_h;
-      last_type = BlockType::CatTitle;
-
-    } else if (current_type == BlockType::Paragraph) {
-      int remaining_lines = (settings.h - y) / settings.line_height;
-      if (remaining_lines < 1)
-        break;
-
-      int min_lines = std::min(3, remaining_lines);
-      int max_lines = std::min(8, remaining_lines);
-      int n_lines = rand_int(min_lines, max_lines);
-
-      blocks.push_back({.type = BlockType::Paragraph,
-                        .y_start = y,
-                        .height = settings.line_height * n_lines,
-                        .n_lines = n_lines});
-      y += settings.line_height * n_lines;
-      last_type = BlockType::Paragraph;
-
-    } else if (current_type == BlockType::Schema) {
-      float schema_ratio = rand_float(0.6f, 0.9f);
-      float x_offset = rand_float(0, 1);
-      int height = rand_int(300, 500);
-
-      blocks.push_back({.type = BlockType::Schema,
-                        .y_start = y,
-                        .height = height,
-                        .schema_x_offset = x_offset});
-      y += height;
-      last_type = BlockType::Schema;
-    }
-
-    if (y + settings.line_height <= settings.h) {
-      blocks.push_back(
-          {.type = BlockType::SkipLine, .y_start = y, .line_skipped = 1});
-      y += settings.line_height;
-    }
-  }
-
-  return blocks;
-}
-
-std::vector<LayoutBlock> generate_page_layout(PageSettings settings,
-                                              std::mt19937 &rng) {
-  std::vector<LayoutBlock> blocks;
-  auto rand_int = [&](int lo, int hi) {
-    return std::uniform_int_distribution<int>(lo, hi)(rng);
-  };
-  auto rand_float = [&]() {
-    return std::uniform_real_distribution<float>(0.f, 1.f)(rng);
-  };
-
-  int top_margin = rand_int(30, std::min(settings.h, 100));
-  int y = top_margin;
-  while (y + settings.line_height <= settings.h) {
-
-    int remaining = (settings.h - y) / settings.line_height;
-    assert(remaining >= 1 && "rand_int would receive lo > hi");
-    int n_lines = rand_int(1, std::min(4, remaining));
-    blocks.push_back({.type = BlockType::Paragraph,
-                      .y_start = y,
-                      .height = settings.line_height * n_lines,
-                      .n_lines = n_lines});
-    y += settings.line_height * n_lines + rand_int(20, 40);
-    if (rand_float() > 0.5 && y + settings.line_height < settings.h) {
-      int remaining = (settings.h - y) / settings.line_height;
-      assert(remaining >= 1 && "rand_int would receive lo > hi");
-      int n_lines = rand_int(1, std::min(4, remaining));
-      blocks.push_back({.type = BlockType::SkipLine,
-                        .y_start = y,
-                        .height = settings.line_height * n_lines,
-                        .line_skipped = n_lines});
-      y += settings.line_height * n_lines;
-    }
-  }
-
-  return blocks;
-}
-
-std::vector<LayoutBlock> generate_layout(PageSettings settings,
-                                         std::mt19937 &rng) {
-  return settings.document ? generate_document_layout(settings, rng)
-                           : generate_page_layout(settings, rng);
-}
-
-void select_assets(
-    PageSettings settings, std::vector<LayoutBlock> &layout,
-    std::map<DatasetType, std::vector<std::unique_ptr<Dataset>>> const
-        &datasets,
-    std::mt19937 &rng) {
-  auto rand_int = [&](int lo, int hi) {
-    return std::uniform_int_distribution<int>(lo, hi)(rng);
-  };
-  auto rand_float = [&]() {
-    return std::uniform_real_distribution<float>(0.f, 1.f)(rng);
-  };
-
-  std::unordered_map<std::string, int> offsets;
-  for (auto const &[k, sub_datasets] : datasets) {
-    for (auto const &d : sub_datasets) {
-      offsets[d->id] = rand_int(0, d->len() - 1);
-    }
-  }
-
-  std::unordered_map<std::string, float> typical_scales;
-  auto get_typical_scale = [&](Dataset *dataset, int target_height) {
-    std::string key = dataset->id + "_" + std::to_string(target_height);
-    if (typical_scales.find(key) == typical_scales.end()) { // No cached
-      std::vector<int> heights;
-      for (int k = 0; k < 50; k++) {
-        int peek_idx = rand_int(0, dataset->len() - 1);
-        heights.push_back(dataset->get_size(peek_idx)[1]);
-      }
-      std::sort(heights.begin(), heights.end());
-      int median_h = heights[heights.size() / 2];
-      typical_scales[key] = static_cast<float>(target_height) /
-                            std::max(1, median_h); // prevent /0
-    }
-    return typical_scales[key];
-  };
-
-  int page_asset_idx = 0; // Global asset index for the entire page
-
-  for (auto &block : layout) {
-    switch (block.type) {
-    case BlockType::Title:
-    case BlockType::CatTitle: {
-      Dataset *dataset =
-          get_random_dataset(datasets, {DatasetType::HandwrittenWords}, rng);
-      int x = rand_int(50, 80);
-      int max_x = settings.w - rand_int(.1 * settings.w, .5 * settings.w);
-      int retry_n = 0;
-
-      block.assets.push_back({});
-      auto &line = block.assets.back();
-
-      float typical_scale = get_typical_scale(dataset, block.height);
-
-      while (x < max_x) {
-        offsets[dataset->id]++;
-        std::array<int, 2> s =
-            dataset->get_size((offsets[dataset->id] - 1) % dataset->len());
-        float raw_scale = static_cast<float>(block.height) / s[1];
-        float scale = raw_scale;
-
-        if (raw_scale > typical_scale * 2.0f) { // > x2 scalling
-          scale = typical_scale;
-        }
-
-        int scaled_w = static_cast<int>(s[0] * scale);
-        int scaled_h = static_cast<int>(s[1] * scale);
-        int y_offset = block.height - scaled_h; // Anchor to bottom
-
-        if (scaled_w + x > max_x) {
-          if (retry_n + 1 > 3) {
-            retry_n = 0;
-            break;
-          }
-          retry_n++;
-          continue;
-        }
-
-        line.push_back(
-            {.dataset_id = dataset->id,
-             .idx = (int)((offsets[dataset->id] - 1) % dataset->len()),
-             .page_idx = page_asset_idx,
-             .w = scaled_w,
-             .h = scaled_h,
-             .x = x,
-             .y = block.y_start + y_offset});
-        page_asset_idx++;
-        x += scaled_w + rand_int(10, 20);
-      }
-      break;
-    }
-    case BlockType::Paragraph: {
-      int x = rand_int(30, 50);
-      block.assets.reserve(block.n_lines);
-      for (int i = 0; i < block.n_lines; i++) {
-        int retry_n = 0;
-        block.assets.push_back({});
-        auto &line = block.assets.back();
-
-        while (x < settings.w) {
-          Dataset *dataset = get_random_dataset(
-              datasets, {DatasetType::HandwrittenWords, DatasetType::MathExpr},
-              rng);
-          offsets[dataset->id]++;
-          std::array<int, 2> s =
-              dataset->get_size((offsets[dataset->id] - 1) % dataset->len());
-
-          float typical_scale =
-              get_typical_scale(dataset, settings.line_height);
-          float raw_scale = static_cast<float>(settings.line_height) / s[1];
-          float scale = raw_scale;
-
-          if (raw_scale > typical_scale * 2.0f) { // > x2 scalling
-            scale = typical_scale;
-          }
-
-          int scaled_w = static_cast<int>(s[0] * scale);
-          int scaled_h = static_cast<int>(s[1] * scale);
-          int y_offset = settings.line_height - scaled_h; // Anchor to bottom
-
-          if (scaled_w + x > settings.w) {
-            if (retry_n + 1 > 3) {
-              retry_n = 0;
-              break;
-            }
-            retry_n++;
-            continue;
-          }
-
-          line.push_back(
-              {.dataset_id = dataset->id,
-               .idx = (int)((offsets[dataset->id] - 1) % dataset->len()),
-               .page_idx = page_asset_idx,
-               .w = scaled_w,
-               .h = scaled_h,
-               .x = x,
-               .y = block.y_start + y_offset + i * settings.line_height});
-          x += scaled_w + rand_int(10, 20);
-        }
-        x = rand_int(30, 50);
-      }
-      break;
-    }
-    case BlockType::Schema: {
-      Dataset *dataset =
-          get_random_dataset(datasets, {DatasetType::Diagram}, rng);
-      offsets[dataset->id]++;
-      std::array<int, 2> s =
-          dataset->get_size((offsets[dataset->id] - 1) % dataset->len());
-      float ratio = static_cast<float>(block.height) / static_cast<float>(s[1]);
-      if (ratio <= 0.0f)
-        ratio = 0.1f;
-      int w = ratio * s[0];
-      int h = ratio * s[1];
-      int offset = (settings.w - w) * block.schema_x_offset;
-      block.assets.push_back({});
-      auto &line = block.assets.back();
-
-      line.push_back({
-          .dataset_id = dataset->id,
-          .idx = (int)((offsets[dataset->id] - 1) % dataset->len()),
-          .page_idx = page_asset_idx,
-          .w = w,
-          .h = h,
-          .x = offset,
-          .y = block.y_start,
-      });
-      break;
-    };
-    case BlockType::SkipLine: {
-      break;
-    }
-    }
-  }
-}
-
 Mat render_clean_page(PageSettings settings, std::vector<LayoutBlock> &layout,
                       std::unordered_map<std::string, Dataset *>
                           &datasets, // map<dataset_id, dataset*>
@@ -773,20 +451,14 @@ void generate_page(int idx, PageSettings settings,
                        &datasets_by_type,
                    const fs::path &clean_dir, const fs::path &ruled_dir,
                    const fs::path &labels_dir, std::mt19937 &rng, bool debug) {
-
-  std::vector<LayoutBlock> layout = generate_layout(settings, rng);
+  Layout layout = generate_layout(settings);
 
   select_assets(settings, layout, datasets_by_type, rng);
   auto start_time = std::chrono::high_resolution_clock::now();
 
-  std::unordered_map<std::string, Dataset *> dataset_by_id;
-  for (const auto &[type, datasets] : datasets_by_type) {
-    for (auto &dataset : datasets) {
-      dataset_by_id[dataset->id] = dataset.get();
-    }
-  }
+  DatasetLookup lookup = make_dataset_lookup(datasets_by_type);
 
-  Mat clean = render_clean_page(settings, layout, dataset_by_id, rng, debug);
+  Mat clean = render_clean_page(settings, layout, lookup, rng, debug);
 
   auto end_time = std::chrono::high_resolution_clock::now();
   std::chrono::duration<double, std::milli> duration_ms = end_time - start_time;
@@ -850,35 +522,10 @@ void generate_pages(fs::path target, std::vector<DatasetS> datasets, int n,
 
   std::cout << std::format("Constructing datasets...") << std::endl;
 
-  std::map<DatasetType, std::vector<std::unique_ptr<Dataset>>> datasets_by_type;
-  std::map<DatasetType, float> total_weight_by_type;
-
-  for (auto type : {DatasetType::HandwrittenWords, DatasetType::MathExpr,
-                    DatasetType::Diagram}) {
-    datasets_by_type.emplace(type, std::vector<std::unique_ptr<Dataset>>{});
-    total_weight_by_type.emplace(type, 0.0f);
-  }
-
-  for (const auto &dataset : datasets) {
-    total_weight_by_type[get_dataset_type(dataset.id)] += dataset.proportion;
-  }
-  // Normalize weights
-  for (auto &dataset : datasets) {
-    dataset.proportion =
-        dataset.proportion / total_weight_by_type[get_dataset_type(dataset.id)];
-  }
-
-  for (const auto &d : datasets) {
-    auto dataset = make_dataset(d); // throws if unknown id
-    if (!dataset->valid())
-      throw std::invalid_argument("Invalid dataset path: " + d.path.string());
-    datasets_by_type[dataset->type].push_back(std::move(dataset));
-    std::cout << std::format("Found dataset {} at {}", d.id, d.path.string())
-              << std::endl;
-  }
+  DatasetGroups datasets_groups = construct_datasets(datasets);
 
   std::cout << std::format("Loading datasets...") << std::endl;
-  for (const auto &[type, vec] : datasets_by_type) {
+  for (const auto &[type, vec] : datasets_groups) {
     for (const auto &d : vec) {
       if (d->valid()) {
         d->load();
@@ -965,7 +612,7 @@ void generate_pages(fs::path target, std::vector<DatasetS> datasets, int n,
                                    .max_warp = max_warp,
                                    .imperfect_lines = imperfect_lines,
                                    .arc = use_arc};
-          generate_page(i, settings, datasets_by_type, clean_dir, ruled_dir,
+          generate_page(i, settings, datasets_groups, clean_dir, ruled_dir,
                         labels_dir, local_rng, debug);
           {
             std::lock_guard<std::mutex> lock(progress_mutex);

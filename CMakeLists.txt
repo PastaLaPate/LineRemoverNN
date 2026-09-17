@@ -16,16 +16,14 @@ find_package(OpenCV REQUIRED COMPONENTS core imgproc photo imgcodecs)
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(CAIRO REQUIRED IMPORTED_TARGET cairo)
 
+file(GLOB_RECURSE EXT_SOURCES CONFIGURE_DEPENDS
+  "src/lineremovernn_ext/*.cpp"
+)
+
 nanobind_add_module(
   _lineremovernn_ext
   NOMINSIZE
-  src/lineremovernn_ext/bindings.cpp
-  src/lineremovernn_ext/page_gen.cpp
-  src/lineremovernn_ext/datasets/iam.cpp
-  src/lineremovernn_ext/datasets/mathwriting.cpp
-  src/lineremovernn_ext/datasets/ai2d.cpp
-  src/lineremovernn_ext/datasets/factory.cpp
-  src/lineremovernn_ext/pugixml/pugixml.cpp
+  ${EXT_SOURCES}
 )
 
 target_include_directories(_lineremovernn_ext PRIVATE

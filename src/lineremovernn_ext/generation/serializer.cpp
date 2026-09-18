@@ -8,8 +8,8 @@ std::unordered_map<BlockType, std::string> block_type_to_string = {
     {BlockType::Schema, "schema"},
     {BlockType::SkipLine, "line_skip"}};
 
-pugi::xml_document serialize_xml(int page_idx, PageSettings &settings,
-                                 Layout &layout) {
+pugi::xml_document serialize_xml(int page_idx, const PageSettings &settings,
+                                 const Layout &layout) {
 
   pugi::xml_document doc;
   pugi::xml_node page = doc.append_child("page");

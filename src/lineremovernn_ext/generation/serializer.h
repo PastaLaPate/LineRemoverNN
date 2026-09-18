@@ -4,5 +4,5 @@
 #include "page_gen.h"
 #include "pugixml/pugixml.hpp"
 
-pugi::xml_document serialize_xml(int page_idx, PageSettings &settings,
-                                 Layout &layout);
+pugi::xml_document serialize_xml(int page_idx, const PageSettings &settings,
+                                 const Layout &layout);

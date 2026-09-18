@@ -4,6 +4,9 @@
 #include "page_gen.h"
 #include <opencv2/core/mat.hpp>
 
+class PythonLoggerBridge;
+
 cv::Mat render_clean_page(const PageSettings settings, Layout &layout,
-                          const DatasetLookup &datasets, bool debug);
+                          const DatasetLookup &datasets,
+                          PythonLoggerBridge &logger, bool debug);
 void draw_lines(cv::Mat &img, bool use_arc, bool imperfect_lines);

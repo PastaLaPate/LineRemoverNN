@@ -3,6 +3,8 @@
 #include <opencv2/core/mat.hpp>
 #include <string>
 
+class PythonLoggerBridge;
+
 struct AssetRow {
   int idx;
   std::string dataset;
@@ -32,6 +34,7 @@ public:
   float proportion;
   bool preload = false;
   bool index = false;
+  PythonLoggerBridge *logger = nullptr;
 
   Dataset(std::string p_id, enum DatasetType type, std::filesystem::path p_path)
       : id(std::move(p_id)), type(type), path(std::move(p_path)),
@@ -48,6 +51,12 @@ public:
   virtual void load() = 0; // Create internal structure mappings
   virtual bool valid() = 0;
   virtual long len() = 0;
+
+  void set_logger(PythonLoggerBridge *p_logger) { logger = p_logger; }
+  void log_debug(const std::string &message) const;
+  void log_info(const std::string &message) const;
+  void log_warning(const std::string &message) const;
+  void log_error(const std::string &message) const;
 
   virtual ~Dataset() = default;
 };

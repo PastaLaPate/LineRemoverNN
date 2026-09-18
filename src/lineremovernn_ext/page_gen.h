@@ -3,6 +3,8 @@
 #include <filesystem>
 #include <vector>
 
+class PythonLoggerBridge;
+
 enum class BlockType { Title, CatTitle, Paragraph, Schema, SkipLine };
 
 struct PageSettings {
@@ -44,4 +46,5 @@ struct LayoutBlock {
 void generate_pages(std::filesystem::path target,
                     std::vector<DatasetS> datasets, int n, bool use_arc,
                     bool document, float max_warp, bool imperfect_lines,
-                    bool save_xml, bool debug, int max_workers);
+                    bool save_xml, bool debug, int max_workers,
+                    PythonLoggerBridge &logger);

@@ -2,7 +2,6 @@
 #include "datasets/datasets.h"
 #include <filesystem>
 #include <format>
-#include <iostream>
 #include <opencv2/core/types.hpp>
 #include <opencv2/imgcodecs.hpp>
 #include <opencv4/opencv2/core/mat.hpp>
@@ -25,11 +24,11 @@ void AI2D::load() {
   std::chrono::duration<double, std::milli> duration_ms = end_time - start_time;
   if (this->images.size() > 0) {
     double avg_time = duration_ms.count() / this->images.size();
-    std::cout << std::format(
-        "[AI2D::load] Loaded {} diagrams in {:.2f} ms ({:.4f} ms/diagram)\n",
-        this->images.size(), duration_ms.count(), avg_time);
+    log_info(std::format("[AI2D] Loaded {} diagrams in {:.2f} ms "
+                         "({:.4f} ms/diagram)",
+                         this->images.size(), duration_ms.count(), avg_time));
   } else {
-    std::cout << "[AI2D::load] No diagrams were loaded.\n";
+    log_info("[AI2D] No diagrams were loaded.");
   }
 }
 
@@ -67,8 +66,8 @@ std::array<int, 2> AI2D::get_size(int idx) {
   if (stbi_info(filename, &width, &height, &channels)) {
     return {width, height};
   } else {
-    std::cout
-        << "Failed to parse image header. Formatter unsupported or corrupt.\n";
+    log_warning("[AI2D] Failed to parse image header. Formatter unsupported or "
+                "corrupt.");
     return {0, 0};
   }
 }

@@ -79,24 +79,23 @@ void IAM::load() {
   uint64_t parsed_count = this->words.size();
   if (parsed_count > 0) {
     double avg_time = duration_ms.count() / parsed_count;
-    std::cout << std::format(
-        "[IAM::load] Loaded {} words in {:.2f} ms ({:.4f} ms/word)\n",
-        parsed_count, duration_ms.count(), avg_time);
+    log_info(std::format("[IAM] Loaded {} words in {:.2f} ms ({:.4f} ms/word)",
+                         parsed_count, duration_ms.count(), avg_time));
   } else {
-    std::cout << "[IAM::load] No words were loaded." << std::endl;
+    log_info("[IAM] No words were loaded.");
   }
 
   if (this->index) {
-    std::cout << "[IAM::load] Starting blob generation." << std::endl;
+    log_info("[IAM] Starting blob generation.");
     this->generate_blob();
-    std::cout << "[IAM::load] Starting blob reading." << std::endl;
+    log_info("[IAM] Starting blob reading.");
     this->read_blob();
   }
 
   if (this->preload) {
 
     auto start_time = std::chrono::high_resolution_clock::now();
-    std::cout << "[IAM::load] Preloading images..." << std::endl;
+    log_info("[IAM] Preloading images...");
     this->preloaded_images.resize(parsed_count);
     for (uint64_t i = 0; i < parsed_count; i++) {
       this->read_image(i, true);
@@ -109,9 +108,8 @@ void IAM::load() {
     std::chrono::duration<double, std::milli> duration_ms =
         end_time - start_time;
     double avg_time = duration_ms.count() / parsed_count;
-    std::cout << std::format(
-        "[IAM::load] Preloaded {} words in {:.2f} ms ({:.4f} ms/word)\n",
-        parsed_count, duration_ms.count(), avg_time);
+    log_info(std::format("[IAM] Preloaded {} words in {:.2f} ms ({:.4f} ms/word)",
+                         parsed_count, duration_ms.count(), avg_time));
     size_t usage = sizeof(this->preloaded_images) +
                    (this->preloaded_images.capacity() * sizeof(cv::Mat));
     for (const auto &mat : this->preloaded_images) {
@@ -120,16 +118,15 @@ void IAM::load() {
       }
     }
 
-    std::cout << std::format("[IAM::load] Total ram usage: {:.2f} MiB",
-                             usage / (1024.0 * 1024.0))
-              << std::endl;
+    log_info(std::format("[IAM] Total ram usage: {:.2f} MiB",
+                         usage / (1024.0 * 1024.0)));
   }
 }
 
 void IAM::generate_blob() {
   uint64_t parsed_count = this->words.size();
   auto start_time = std::chrono::high_resolution_clock::now();
-  std::cout << "[IAM::load::indexer] Starting indexing..." << std::endl;
+  log_info("[IAM] Starting indexing...");
   std::filesystem::path blobFile = this->path / "words.blob";
   if (std::filesystem::exists(blobFile) &&
       !std::filesystem::is_directory(blobFile)) {
@@ -141,13 +138,10 @@ void IAM::generate_blob() {
     in.read(reinterpret_cast<char *>(&count), sizeof(count));
 
     if (magic == BLOB_MAGIC && count == parsed_count) {
-      std::cout
-          << "[IAM::load::indexer] Found existing blob. aborting generation"
-          << std::endl;
+      log_info("[IAM] Found existing blob; aborting generation.");
       return;
     }
-    std::cout << "[IAM::load::indexer] Existing blob is outdated, regenerating"
-              << std::endl;
+    log_info("[IAM] Existing blob is outdated; regenerating.");
     // Version changed or new words added for some reason, redo indexing
   }
   std::ofstream out(blobFile, std::ios::binary |
@@ -178,9 +172,8 @@ void IAM::generate_blob() {
     std::ifstream img_in(word.path, std::ios::binary);
     if (!img_in.is_open()) {
       // Cant find image
-      std::cerr << std::format(
-          "[IAM::load::blob_generator] Missing file: {}, ignoring\n",
-          word.path.string());
+      log_warning(
+          std::format("[IAM] Missing file: {}, ignoring", word.path.string()));
       offsets[i] = 0;
       lengths[i] = 0;
       continue;
@@ -206,8 +199,8 @@ void IAM::generate_blob() {
 
   std::chrono::duration<double, std::milli> duration_ms = end_time - start_time;
 
-  std::cout << "[IAM::load::blob_generator] Blob of size " << offset_pos
-            << " generated in " << duration_ms.count() << "ms" << std::endl;
+  log_info(std::format("[IAM] Blob of size {} generated in {:.2f} ms",
+                       offset_pos, duration_ms.count()));
 }
 
 void IAM::read_blob() {
@@ -260,12 +253,13 @@ cv::Mat IAM::read_image(int idx, bool preloading) {
         ::pread(this->blob_fd, buf.data(), word.blob_length, word.blob_offset);
 
     if (bytes_read != word.blob_length) {
-      std::cerr << "Short read for image " << word.path << std::endl;
+      log_error(std::format("[IAM] Short read for image {}",
+                            word.path.string()));
       return img;
     }
 
     if (buf.empty()) {
-      std::cerr << std::format("[IAM] Empty file: {}\n", word.path.string());
+      log_warning(std::format("[IAM] Empty file: {}", word.path.string()));
       return img;
     }
     img = cv::imdecode(buf, cv::IMREAD_GRAYSCALE);
@@ -273,7 +267,7 @@ cv::Mat IAM::read_image(int idx, bool preloading) {
     std::ifstream f(word.path, std::ios::binary);
     if (!f.is_open()) {
 
-      std::cerr << std::format("[IAM] Missing file: {}\n", word.path.string());
+      log_warning(std::format("[IAM] Missing file: {}", word.path.string()));
       return img;
     }
 
@@ -281,7 +275,7 @@ cv::Mat IAM::read_image(int idx, bool preloading) {
                            std::istreambuf_iterator<char>());
 
     if (buf.empty()) {
-      std::cerr << std::format("[IAM] Empty file: {}\n", word.path.string());
+      log_warning(std::format("[IAM] Empty file: {}", word.path.string()));
       return img;
     }
     img = cv::imdecode(buf, cv::IMREAD_GRAYSCALE);

@@ -5,7 +5,6 @@
 #include <cairo.h>
 #include <filesystem>
 #include <format>
-#include <iostream>
 #include <opencv2/core/types.hpp>
 #include <opencv2/imgcodecs.hpp>
 #include <opencv2/imgproc.hpp>
@@ -39,7 +38,7 @@ void MathWriting::load() {
     }
   }
 
-  std::cout << "Parsing " << count << " Math XML files." << std::endl;
+  log_info(std::format("[MathWriting] Parsing {} Math XML files.", count));
 
   this->parsed_cache.resize(this->assets.size());
 
@@ -51,8 +50,9 @@ void MathWriting::load() {
     pugi::xml_document doc;
     pugi::xml_parse_result result = doc.load_file(asset_path.c_str());
     if (!result) {
-      std::cerr << "Failed to load asset: " << asset_path
-                << "\nError description: " << result.description() << "\n";
+      log_error(std::format("[MathWriting] Failed to load asset: {}. Error "
+                            "description: {}",
+                            asset_path.string(), result.description()));
       continue;
     }
 
@@ -107,12 +107,11 @@ void MathWriting::load() {
 
   if (!this->assets.empty()) {
     double avg_time = duration_ms.count() / this->assets.size();
-    std::cout << std::format("[MathWriting::load] Loaded and parsed {} assets "
-                             "in {:.2f} ms ({:.4f} ms/asset)\n",
-                             this->assets.size(), duration_ms.count(),
-                             avg_time);
+    log_info(std::format("[MathWriting] Loaded and parsed {} assets in {:.2f} "
+                         "ms ({:.4f} ms/asset)",
+                         this->assets.size(), duration_ms.count(), avg_time));
   } else {
-    std::cout << "[MathWriting::load] No assets were loaded.\n";
+    log_info("[MathWriting] No assets were loaded.");
   }
 }
 

@@ -1,4 +1,5 @@
 #include "page_gen.h"
+#include "logging/python_logger.h"
 #include <nanobind/nanobind.h>
 #include <nanobind/ndarray.h>
 #include <nanobind/stl/filesystem.h>
@@ -79,8 +80,21 @@ NB_MODULE(_lineremovernn_ext, m) {
       .def_ro("line_skipped", &LayoutBlock::line_skipped)
       .def_ro("assets", &LayoutBlock::assets);
 
-  m.def("generate_pages", &generate_pages, "target"_a, "datasets"_a, "n"_a = 5,
-        "use_arc"_a = true, "document"_a = true, "max_warp"_a = .1,
-        "imperfect_lines"_a = true, "save_xml"_a = false, "debug"_a = false,
-        "max_workers"_a = 0, nb::call_guard<nb::gil_scoped_release>());
+  m.def(
+      "generate_pages",
+      [](std::filesystem::path target, std::vector<DatasetS> datasets, int n,
+         bool use_arc, bool document, float max_warp, bool imperfect_lines,
+         bool save_xml, bool debug, int max_workers, nb::object logger) {
+        PythonLoggerBridge logger_bridge(std::move(logger));
+        {
+          nb::gil_scoped_release release;
+          generate_pages(std::move(target), std::move(datasets), n, use_arc,
+                         document, max_warp, imperfect_lines, save_xml, debug,
+                         max_workers, logger_bridge);
+        }
+      },
+      "target"_a, "datasets"_a, "n"_a = 5, "use_arc"_a = true,
+      "document"_a = true, "max_warp"_a = .1, "imperfect_lines"_a = true,
+      "save_xml"_a = false, "debug"_a = false, "max_workers"_a = 0,
+      "logger"_a = nb::none());
 }

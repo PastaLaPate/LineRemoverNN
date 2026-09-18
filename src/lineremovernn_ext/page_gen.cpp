@@ -6,6 +6,7 @@
 #include "generation/layout.h"
 #include "generation/rendering.h"
 #include "generation/serializer.h"
+#include "logging/python_logger.h"
 #include "pugixml/pugixml.hpp"
 #include "utils/random.h"
 #include <algorithm>
@@ -44,7 +45,8 @@ void signal_handler(int signal) {
 
 void generate_page(int idx, PageSettings settings, DatasetGroups &groups,
                    const fs::path &clean_dir, const fs::path &ruled_dir,
-                   const fs::path &labels_dir, bool debug) {
+                   const fs::path &labels_dir, PythonLoggerBridge &logger,
+                   bool debug) {
   Layout layout = generate_layout(settings);
 
   select_assets(settings, layout, groups);
@@ -52,12 +54,12 @@ void generate_page(int idx, PageSettings settings, DatasetGroups &groups,
 
   DatasetLookup lookup = make_dataset_lookup(groups);
 
-  Mat clean = render_clean_page(settings, layout, lookup, debug);
+  Mat clean = render_clean_page(settings, layout, lookup, logger, debug);
 
   auto end_time = std::chrono::high_resolution_clock::now();
   std::chrono::duration<double, std::milli> duration_ms = end_time - start_time;
   if (debug) {
-    std::cout << "Render in " << duration_ms.count() << " ms" << std::endl;
+    logger.debug(std::format("Render in {:.2f} ms", duration_ms.count()));
   }
 
   std::vector<int> compression_params;
@@ -86,14 +88,14 @@ void generate_page(int idx, PageSettings settings, DatasetGroups &groups,
 void generate_pages(fs::path target, std::vector<DatasetS> datasets, int n,
                     bool use_arc, bool document, float max_warp,
                     bool imperfect_lines, bool save_xml, bool debug,
-                    int max_workers) {
+                    int max_workers, PythonLoggerBridge &logger) {
   cv::setNumThreads(1);
   std::signal(SIGINT, signal_handler);
 
   shutdown_requested = false;
 
-  std::cout << std::format("Generating {} pages", n) << std::endl;
-  std::cout << std::format("Creating dirs...") << std::endl;
+  logger.info(std::format("Generating {} pages", n));
+  logger.info("Creating output directories");
   fs::path ruled_dir = target / "ruled-pages";
   fs::path clean_dir = target / "clean-pages";
   fs::path labels_dir = target / "labels";
@@ -107,11 +109,11 @@ void generate_pages(fs::path target, std::vector<DatasetS> datasets, int n,
     throw std::invalid_argument("Datasets cannot be empty");
   }
 
-  std::cout << std::format("Constructing datasets...") << std::endl;
+  logger.info("Constructing datasets");
 
-  DatasetGroups datasets_groups = construct_datasets(datasets);
+  DatasetGroups datasets_groups = construct_datasets(datasets, logger);
 
-  std::cout << std::format("Loading datasets...") << std::endl;
+  logger.info("Loading datasets");
   for (const auto &[type, vec] : datasets_groups) {
     for (const auto &d : vec) {
       if (d->valid()) {
@@ -140,9 +142,8 @@ void generate_pages(fs::path target, std::vector<DatasetS> datasets, int n,
                static_cast<unsigned int>(n));
   std::vector<std::jthread> workers;
 
-  std::cout << std::format("Spawning {} worker threads... Starting generation",
-                           num_threads)
-            << std::endl;
+  logger.info(std::format(
+      "Spawning {} worker threads... Starting generation", num_threads));
 
   auto start_time = std::chrono::high_resolution_clock::now();
   for (unsigned int t = 0; t < num_threads; ++t) {
@@ -196,17 +197,16 @@ void generate_pages(fs::path target, std::vector<DatasetS> datasets, int n,
                                    .imperfect_lines = imperfect_lines,
                                    .arc = use_arc};
           generate_page(i, settings, datasets_groups, clean_dir, ruled_dir,
-                        labels_dir, debug);
+                        labels_dir, logger, debug);
           {
             std::lock_guard<std::mutex> lock(progress_mutex);
             work++;
           }
         } catch (const std::exception &e) {
-          std::cerr << std::format("[Worker] Exception on page {}: {}\n", i,
-                                   e.what());
+          logger.error(
+              std::format("[Worker] Exception on page {}: {}", i, e.what()));
         } catch (...) {
-          std::cerr << std::format("[Worker] Unknown exception on page {}\n",
-                                   i);
+          logger.error(std::format("[Worker] Unknown exception on page {}", i));
         }
       }
     });
@@ -216,8 +216,7 @@ void generate_pages(fs::path target, std::vector<DatasetS> datasets, int n,
   workers.clear();
 
   if (shutdown_requested) {
-    std::cout << "\nGeneration interrupted by user. Exiting cleanly..."
-              << std::endl;
+    logger.warning("Generation interrupted by user. Exiting cleanly...");
   }
 
   bar->done();
@@ -226,6 +225,6 @@ void generate_pages(fs::path target, std::vector<DatasetS> datasets, int n,
   std::chrono::duration<double, std::milli> duration_ms = end_time - start_time;
 
   double avg_time = duration_ms.count() / n;
-  std::cout << std::format("Generated {} pages in {:.2f} ms ({:.4f} ms/page)\n",
-                           n, duration_ms.count(), avg_time);
+  logger.info(std::format("Generated {} pages in {:.2f} ms ({:.4f} ms/page)",
+                          n, duration_ms.count(), avg_time));
 }

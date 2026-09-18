@@ -181,4 +181,5 @@ class GeneratePagesCPPCommand(Command):
             document=args.docs,
             debug=args.debug or False,
             max_workers=args.workers or 0,
+            logger=logger,
         )

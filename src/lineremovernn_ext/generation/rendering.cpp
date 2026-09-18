@@ -1,5 +1,6 @@
 #include "rendering.h"
 #include "generation/asset_selection.h"
+#include "logging/python_logger.h"
 #include "utils/random.h"
 #include <opencv2/core/hal/interface.h>
 #include <opencv2/core/mat.hpp>
@@ -203,7 +204,8 @@ void draw_lines(Mat &img, bool use_arc, bool imperfect_lines) {
 }
 
 Mat render_clean_page(const PageSettings settings, Layout &layout,
-                      const DatasetLookup &datasets, bool debug) {
+                      const DatasetLookup &datasets,
+                      PythonLoggerBridge &logger, bool debug) {
   int w = settings.w;
   int h = settings.h;
   int brightness = settings.brightness;
@@ -234,10 +236,10 @@ Mat render_clean_page(const PageSettings settings, Layout &layout,
 
         Mat img = row.image;
         if (img.empty() || img.cols == 0 || img.rows == 0) {
-          std::cerr << std::format("[Warning] Dataset '{}' returned an empty "
-                                   "image at offset {}. Skipping token.",
-                                   d.id, asset.idx)
-                    << std::endl;
+          logger.warning(std::format(
+              "[Render] Dataset '{}' returned an empty image at offset {}. "
+              "Skipping token.",
+              d.id, asset.idx));
           continue;
         }
         asset.transcript = row.transcript;
@@ -280,18 +282,18 @@ Mat render_clean_page(const PageSettings settings, Layout &layout,
     static std::mutex log_mutex;
     std::lock_guard<std::mutex> lk(log_mutex);
 
-    std::cout << std::format(
-        "[render_clean_page] {} assets — avg load: {:.4f} ms, avg warp: {:.4f} "
-        "ms, avg copy: {:.4f} ms "
-        "(totals: load {:.2f} ms, warp {:.2f} ms, copy {:.2f} ms)\n",
+    logger.debug(std::format(
+        "[Render] {} assets — avg load: {:.4f} ms, avg warp: {:.4f} ms, avg "
+        "copy: {:.4f} ms (totals: load {:.2f} ms, warp {:.2f} ms, copy {:.2f} "
+        "ms)",
         asset_count, load_total_ms / asset_count, warp_total_ms / asset_count,
         copy_total_ms / asset_count, load_total_ms, warp_total_ms,
-        copy_total_ms);
+        copy_total_ms));
 
     for (const auto &[dataset_id, stat] : load_stats_by_dataset) {
-      std::cout << std::format(
-          "    dataset '{}': {} loads, avg {:.4f} ms, total {:.2f} ms\n",
-          dataset_id, stat.count, stat.total_ms / stat.count, stat.total_ms);
+      logger.debug(std::format(
+          "[Render] dataset '{}': {} loads, avg {:.4f} ms, total {:.2f} ms",
+          dataset_id, stat.count, stat.total_ms / stat.count, stat.total_ms));
     }
   }
 

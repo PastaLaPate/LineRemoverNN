@@ -2,9 +2,9 @@ import argparse
 
 from torch.cuda import is_available as torch_cuda_available
 
-import lineremovernn.utils.logging as logging
 from lineremovernn import commands
 from lineremovernn._ext import HAS_EXT
+from lineremovernn.utils import logging
 from lineremovernn.utils.consts import ARCH, OS, PYTHON_VERSION, VERSION
 
 logger = logging.get_logger("Main")
@@ -13,7 +13,9 @@ logger = logging.get_logger("Main")
 def main():
     logger.info("Running on LineRemoverNN version %s", VERSION)
     logger.debug("Has EXT : %d", HAS_EXT)
-    logger.debug("OS: %s | Python: %s | Architecture: %s", OS, PYTHON_VERSION, ARCH)
+    logger.debug(
+        "OS: %s | Python: %s | Architecture: %s", OS, PYTHON_VERSION, ARCH
+    )
     logger.info(
         "Cuda availability : %s",
         "available" if torch_cuda_available() else "not available",

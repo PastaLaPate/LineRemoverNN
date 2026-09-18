@@ -1,12 +1,12 @@
 #include "asset_selection.h"
 #include "utils/random.h"
 
-Dataset *get_random_dataset(const DatasetGroups &datasets_by_type,
+Dataset *get_random_dataset(const DatasetGroups &groups,
                             std::initializer_list<DatasetType> types) {
   std::vector<Dataset *> candidates;
   std::vector<float> weights;
   for (auto type : types) {
-    for (const auto &d : datasets_by_type.at(type)) {
+    for (const auto &d : groups.at(type)) {
       candidates.push_back(d.get());
       weights.push_back(d->proportion);
     }

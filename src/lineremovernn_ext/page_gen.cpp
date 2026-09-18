@@ -42,16 +42,15 @@ void signal_handler(int signal) {
   }
 }
 
-void generate_page(int idx, PageSettings settings,
-                   DatasetGroups &datasets_by_type, const fs::path &clean_dir,
-                   const fs::path &ruled_dir, const fs::path &labels_dir,
-                   bool debug) {
+void generate_page(int idx, PageSettings settings, DatasetGroups &groups,
+                   const fs::path &clean_dir, const fs::path &ruled_dir,
+                   const fs::path &labels_dir, bool debug) {
   Layout layout = generate_layout(settings);
 
-  select_assets(settings, layout, datasets_by_type);
+  select_assets(settings, layout, groups);
   auto start_time = std::chrono::high_resolution_clock::now();
 
-  DatasetLookup lookup = make_dataset_lookup(datasets_by_type);
+  DatasetLookup lookup = make_dataset_lookup(groups);
 
   Mat clean = render_clean_page(settings, layout, lookup, debug);
 
@@ -134,6 +133,7 @@ void generate_pages(fs::path target, std::vector<DatasetS> datasets, int n,
                                         .speed_unit = "page/s",
                                     });
   std::atomic<int> next_page_idx{0};
+
   unsigned int num_threads =
       std::min(max_workers == 0 ? std::thread::hardware_concurrency()
                                 : static_cast<unsigned int>(max_workers),
@@ -188,6 +188,7 @@ void generate_pages(fs::path target, std::vector<DatasetS> datasets, int n,
 
                                    .w = w,
                                    .h = h,
+
                                    .line_height = line_height,
                                    .brightness =
                                        ThreadRandom::rand_int(220, 255),

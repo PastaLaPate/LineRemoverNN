@@ -1,6 +1,5 @@
 import torch
-import torch.nn as nn
-from torch import Tensor
+from torch import Tensor, nn
 
 
 class DoubleConv(nn.Module):
@@ -9,10 +8,18 @@ class DoubleConv(nn.Module):
     def __init__(self, in_channels: int, out_channels: int):
         super().__init__()
         self.net = nn.Sequential(
-            nn.Conv2d(in_channels, out_channels, kernel_size=3, padding=1, bias=False),
+            nn.Conv2d(
+                in_channels, out_channels, kernel_size=3, padding=1, bias=False
+            ),
             nn.BatchNorm2d(out_channels),
             nn.ReLU(inplace=True),
-            nn.Conv2d(out_channels, out_channels, kernel_size=3, padding=1, bias=False),
+            nn.Conv2d(
+                out_channels,
+                out_channels,
+                kernel_size=3,
+                padding=1,
+                bias=False,
+            ),
             nn.BatchNorm2d(out_channels),
             nn.ReLU(inplace=True),
         )
@@ -79,7 +86,9 @@ class LineRemovalUNet(nn.Module):
 
         # --- Decoder Pass with Skip Connections ---
         d4 = self.up4(b)
-        d4 = torch.cat([e4, d4], dim=1)  # Concatenate spatial information from encoder
+        d4 = torch.cat(
+            [e4, d4], dim=1
+        )  # Concatenate spatial information from encoder
         d4 = self.dec4(d4)
 
         d3 = self.up3(d4)
@@ -110,7 +119,9 @@ class LineRemovalUNet(nn.Module):
 # Quick sanity check
 if __name__ == "__main__":
     model = LineRemovalUNet().cuda()
-    dummy_input = torch.randn(8, 1, 256, 256).cuda()  # Batch of 8, 1-channel, 256x256
+    dummy_input = torch.randn(
+        8, 1, 256, 256
+    ).cuda()  # Batch of 8, 1-channel, 256x256
     output = model(dummy_input)
     print(f"Input shape: {dummy_input.shape}")
     print(f"Output shape: {output.shape}")

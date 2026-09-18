@@ -24,7 +24,8 @@ Ex in equivalent html tag:
   <h3>Other category 1</h3>
 </body>
 ```
-Algorithm 
+
+Algorithm
 
 title is centered can only be the first line of the page, x1.2-1.5 scale of a normal line
 then skip 2 lines

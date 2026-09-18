@@ -10,7 +10,9 @@ class Command(ABC):
     def add_command(
         self, subparser: argparse._SubParsersAction[argparse.ArgumentParser]
     ) -> None:
-        parser = subparser.add_parser(self.name, help=self.desc, description=self.desc)
+        parser = subparser.add_parser(
+            self.name, help=self.desc, description=self.desc
+        )
         parser.set_defaults(func=self.execute)
         self.init_parser(parser)
 

@@ -1,6 +1,5 @@
 #include "layout.h"
 #include "utils/random.h"
-#include <iostream>
 
 Layout generate_document_layout(const PageSettings &settings) {
   Layout blocks;

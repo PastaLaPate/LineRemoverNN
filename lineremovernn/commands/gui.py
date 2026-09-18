@@ -6,9 +6,9 @@ from tkinter import filedialog, messagebox
 
 import torch
 import torch.nn.functional as F
-import torchvision.transforms.v2 as v2
 from PIL import Image, ImageTk
 from torch.amp.autocast_mode import autocast
+from torchvision.transforms import v2
 
 from lineremovernn.commands.command import Command
 from lineremovernn.model.lineremover import LineRemovalUNet
@@ -41,7 +41,9 @@ class GUIInferCommand(Command):
         if lm is not None:
             latest_model = load_model(lm[1], training=False)
             model.load_state_dict(latest_model.model_state)
-            logger.info(f"Loaded weights from epoch {latest_model.stats.epoch}")
+            logger.info(
+                f"Loaded weights from epoch {latest_model.stats.epoch}"
+            )
         else:
             logger.warning("No saved model found! Using random weights.")
 
@@ -80,7 +82,10 @@ class LineRemoverApp:
         toolbar.pack(side=tk.TOP, fill=tk.X)
 
         self.btn_load = tk.Button(
-            toolbar, text="Open Image", command=self.load_image, font=("Arial", 11)
+            toolbar,
+            text="Open Image",
+            command=self.load_image,
+            font=("Arial", 11),
         )
         self.btn_load.pack(side=tk.LEFT, padx=10, pady=10)
 
@@ -105,19 +110,33 @@ class LineRemoverApp:
         self.btn_save.pack(side=tk.LEFT, padx=10, pady=10)
 
         workspace = tk.Frame(self.root, bg="#f5f5f5")
-        workspace.pack(side=tk.TOP, fill=tk.BOTH, expand=True, padx=10, pady=10)
+        workspace.pack(
+            side=tk.TOP, fill=tk.BOTH, expand=True, padx=10, pady=10
+        )
 
         frame_input = tk.LabelFrame(
-            workspace, text="Original Image", font=("Arial", 10, "bold"), bg="#f5f5f5"
+            workspace,
+            text="Original Image",
+            font=("Arial", 10, "bold"),
+            bg="#f5f5f5",
         )
-        frame_input.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=5, pady=5)
-        self.lbl_input = tk.Label(frame_input, text="No image loaded", bg="#e8e8e8")
+        frame_input.pack(
+            side=tk.LEFT, fill=tk.BOTH, expand=True, padx=5, pady=5
+        )
+        self.lbl_input = tk.Label(
+            frame_input, text="No image loaded", bg="#e8e8e8"
+        )
         self.lbl_input.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
 
         frame_output = tk.LabelFrame(
-            workspace, text="Processed Image", font=("Arial", 10, "bold"), bg="#f5f5f5"
+            workspace,
+            text="Processed Image",
+            font=("Arial", 10, "bold"),
+            bg="#f5f5f5",
         )
-        frame_output.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=5, pady=5)
+        frame_output.pack(
+            side=tk.LEFT, fill=tk.BOTH, expand=True, padx=5, pady=5
+        )
         self.lbl_output = tk.Label(
             frame_output, text="Awaiting processing...", bg="#e8e8e8"
         )
@@ -126,7 +145,9 @@ class LineRemoverApp:
     def load_image(self):
         file_path = filedialog.askopenfilename(
             parent=self.root,
-            filetypes=[("Image Files", "*.png *.jpg *.jpeg *.bmp *.tiff *.webp")],
+            filetypes=[
+                ("Image Files", "*.png *.jpg *.jpeg *.bmp *.tiff *.webp")
+            ],
         )
         if not file_path:
             return
@@ -141,7 +162,7 @@ class LineRemoverApp:
             self.display_preview(self.source_image, self.lbl_input)
             self.btn_process.config(state=tk.NORMAL)
         except Exception as e:
-            messagebox.showerror("Error", f"Failed to load image:\n{str(e)}")
+            messagebox.showerror("Error", f"Failed to load image:\n{e!s}")
 
     def process_image(self):
         if self.source_image is None:
@@ -159,7 +180,9 @@ class LineRemoverApp:
             pad_h = (256 - orig_h % 256) % 256
             pad_w = (256 - orig_w % 256) % 256
 
-            padded_tensor = F.pad(img_tensor, (0, pad_w, 0, pad_h), mode="reflect")
+            padded_tensor = F.pad(
+                img_tensor, (0, pad_w, 0, pad_h), mode="reflect"
+            )
             _, ph, pw = padded_tensor.shape
 
             output_tensor = torch.zeros_like(padded_tensor)
@@ -174,9 +197,9 @@ class LineRemoverApp:
                         with autocast(DEVICE):
                             pred_tile = self.model(tile_batch)
 
-                        output_tensor[:, y : y + 256, x : x + 256] = pred_tile.squeeze(
-                            0
-                        ).cpu()
+                        output_tensor[:, y : y + 256, x : x + 256] = (
+                            pred_tile.squeeze(0).cpu()
+                        )
 
             # Crop back to original sizes
             output_tensor = output_tensor[:, :orig_h, :orig_w]
@@ -196,7 +219,7 @@ class LineRemoverApp:
         except Exception as e:
             messagebox.showerror(
                 "Inference Error",
-                f"An error occurred while cleaning the image:\n{str(e)}",
+                f"An error occurred while cleaning the image:\n{e!s}",
             )
         finally:
             self.root.config(cursor="")
@@ -217,7 +240,7 @@ class LineRemoverApp:
             self.processed_image.save(file_path)
             messagebox.showinfo("Success", "Cleaned image saved successfully!")
         except Exception as e:
-            messagebox.showerror("Save Error", f"Could not save file:\n{str(e)}")
+            messagebox.showerror("Save Error", f"Could not save file:\n{e!s}")
 
     def display_preview(self, pil_img: Image.Image, label_widget: tk.Label):
         max_w, max_h = 500, 550

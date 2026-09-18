@@ -111,7 +111,9 @@ class ImageDataset(CachedDataset):
     def get_image(self, idx: int, mode="RGBA") -> Image.Image:
         asset = super().__getitem__(idx)
         if asset.raw_bytes is None:
-            raise FileNotFoundError(f"Could not read image bytes from {asset.path}")
+            raise FileNotFoundError(
+                f"Could not read image bytes from {asset.path}"
+            )
         return Image.open(BytesIO(asset.raw_bytes)).convert(mode)
 
 
@@ -158,7 +160,9 @@ class DownloadableDataset(Dataset):
 
     @classmethod
     @abstractmethod
-    def extract(cls, download_path: str, dataset_path: str, force: bool = False):
+    def extract(
+        cls, download_path: str, dataset_path: str, force: bool = False
+    ):
         pass
 
 

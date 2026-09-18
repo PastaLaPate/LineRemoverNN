@@ -12,15 +12,19 @@ def ssim_loss(predictions, targets, kernel_size=11, C1=0.01**2, C2=0.03**2):
 
     # Compute variance & covariance (clamped to 0 to prevent float32 precision dipping below zero)
     sigma_x = torch.clamp(
-        F.avg_pool2d(predictions**2, kernel_size, stride=1, padding=padding) - mu_x**2,
+        F.avg_pool2d(predictions**2, kernel_size, stride=1, padding=padding)
+        - mu_x**2,
         min=0,
     )
     sigma_y = torch.clamp(
-        F.avg_pool2d(targets**2, kernel_size, stride=1, padding=padding) - mu_y**2,
+        F.avg_pool2d(targets**2, kernel_size, stride=1, padding=padding)
+        - mu_y**2,
         min=0,
     )
     sigma_xy = (
-        F.avg_pool2d(predictions * targets, kernel_size, stride=1, padding=padding)
+        F.avg_pool2d(
+            predictions * targets, kernel_size, stride=1, padding=padding
+        )
         - mu_x * mu_y
     )
 
@@ -33,4 +37,6 @@ def ssim_loss(predictions, targets, kernel_size=11, C1=0.01**2, C2=0.03**2):
 
 
 def criterion(predicted, target) -> torch.Tensor:
-    return F.l1_loss(predicted, target) * 1.0 + ssim_loss(predicted, target) * 0.3
+    return (
+        F.l1_loss(predicted, target) * 1.0 + ssim_loss(predicted, target) * 0.3
+    )

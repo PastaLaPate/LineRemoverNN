@@ -34,7 +34,9 @@ class AI2DDataset(DownloadableDataset, ImageDataset):
         target_file = download_p / cls.FILENAME
 
         if not target_file.exists() or force:
-            logger.info(f"Downloading AI2D dataset from source: {cls.DOWNLOAD_URL}")
+            logger.info(
+                f"Downloading AI2D dataset from source: {cls.DOWNLOAD_URL}"
+            )
             chunk_size = 1024 * 1024  # 1MB chunks
 
             with (
@@ -62,7 +64,9 @@ class AI2DDataset(DownloadableDataset, ImageDataset):
             )
 
     @classmethod
-    def extract(cls, download_path: str, dataset_path: str, force: bool = False):
+    def extract(
+        cls, download_path: str, dataset_path: str, force: bool = False
+    ):
         download_p = Path(download_path)
         dataset_p = Path(dataset_path) / "ai2d"
         archive_source = download_p / cls.FILENAME

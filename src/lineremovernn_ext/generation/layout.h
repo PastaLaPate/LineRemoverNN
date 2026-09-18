@@ -1,4 +1,4 @@
-
+#pragma once
 #include "page_gen.h"
 #include <vector>
 

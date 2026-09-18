@@ -1,4 +1,4 @@
-
+#pragma once
 #include "datasets/utils.h"
 #include "layout.h"
 #include "page_gen.h"

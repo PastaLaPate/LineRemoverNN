@@ -1,6 +1,6 @@
+import datetime
 import logging
 from dataclasses import dataclass
-from datetime import datetime
 from pathlib import Path
 
 import torch
@@ -35,7 +35,7 @@ def save_model(
 ):
     path = (
         dir
-        / f"epoch_{stats.epoch}_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.pt"
+        / f"epoch_{stats.epoch}_{datetime.datetime.now(tz=datetime.UTC).strftime('%Y-%m-%d_%H-%M-%S')}.pt"
     )
     path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -62,9 +62,7 @@ def ls_models(
         if not path.is_file() or path.suffix != ".pt":
             continue
         try:
-            data = torch.load(
-                path, map_location=DEVICE, weights_only=not training
-            )
+            data = torch.load(path, map_location=DEVICE, weights_only=not training)
             models.append(
                 (
                     ModelStats(

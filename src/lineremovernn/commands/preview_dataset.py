@@ -54,9 +54,7 @@ class PreviewDatasetCommand(Command):
                             fill=0,
                             padding_mode="constant",
                         ),
-                        v2.RandomPerspective(
-                            distortion_scale=0.15, p=0.5, fill=0
-                        ),
+                        v2.RandomPerspective(distortion_scale=0.15, p=0.5, fill=0),
                         v2.RandomAffine(
                             degrees=(-1.5, 1.5),
                             scale=(
@@ -80,10 +78,10 @@ class PreviewDatasetCommand(Command):
                 True,
             )
             if len(pages) < args.n:
-                raise Exception("Not enough pages in the dataset.")
+                raise RuntimeError("Not enough pages in the dataset.")
 
             indices = random.sample(range(len(pages)), min(args.n, len(pages)))
-            fig, axes = plt.subplots(
+            _fig, axes = plt.subplots(
                 2, args.n, figsize=(5 * args.n, 12), squeeze=False
             )
 

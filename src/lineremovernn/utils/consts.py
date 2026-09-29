@@ -6,7 +6,17 @@ from pathlib import Path
 import distro
 from torch.cuda import is_available as torch_cuda_available
 
-ROOT = Path(__file__).parent.parent  # equal lineremovernn package dir
+try:
+    from lineremovernn._lineremovernn_ext import (  # noqa: F401
+        Dataset,
+        generate_pages,
+    )
+
+    HAS_EXT = True
+except ImportError:
+    HAS_EXT = False
+
+ROOT = Path(__file__).parent.parent.parent  # equal src dir
 SAVED = ROOT.parent / "saved"
 
 DEFAULT_DOWNLOADS = SAVED / "downloads"

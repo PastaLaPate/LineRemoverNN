@@ -1,13 +1,14 @@
+import datetime
 import logging
 import threading
-from datetime import datetime
 from pathlib import Path
+from typing import ClassVar
 
 from lineremovernn.utils.consts import DEFAULT_LOGS
 
 
 class _ColorFormatter(logging.Formatter):
-    _COLORS = {
+    _COLORS: ClassVar[dict[int, str]] = {
         logging.DEBUG: "\x1b[90m",
         logging.INFO: "\x1b[96m",
         logging.WARNING: "\x1b[93m",
@@ -50,7 +51,7 @@ def _configure_root(log_dir: Path) -> None:
             return
 
         log_dir.mkdir(parents=True, exist_ok=True)
-        timestamp = datetime.now().strftime("%d-%m-%Y-%H-%M-%S")
+        timestamp = datetime.datetime.now(tz=datetime.UTC).strftime("%d-%m-%Y-%H-%M-%S")
         log_file = log_dir / f"{timestamp}-logs.log"
 
         root = logging.getLogger("LineRemoverNN")

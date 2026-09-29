@@ -45,7 +45,7 @@ if(NOT CMAKE_CROSSCOMPILING)
     _lineremovernn_ext_stub
     ALL
     MODULE _lineremovernn_ext
-    OUTPUT ${CMAKE_SOURCE_DIR}/lineremovernn/_lineremovernn_ext.pyi
+    OUTPUT ${CMAKE_SOURCE_DIR}/src/lineremovernn/_lineremovernn_ext.pyi
     DEPENDS _lineremovernn_ext
   )
 endif()

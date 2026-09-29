@@ -71,9 +71,7 @@ class TestCommand(Command):
         if lm is not None:
             latest_model = load_model(lm[1], training=False)
             model.load_state_dict(latest_model.model_state)
-            logger.info(
-                f"Loaded model weights from epoch {latest_model.stats.epoch}"
-            )
+            logger.info(f"Loaded model weights from epoch {latest_model.stats.epoch}")
         else:
             logger.warning(
                 "No saved model found. Running inference with random weights!"
@@ -147,14 +145,12 @@ class TestCommand(Command):
                     if args.loss:
                         loss = criterion(pred[i], clean[i])
                         losses.append(loss.item())
-                        logger.info(
-                            f"Sample {i} generated. Loss : {loss.item()}"
-                        )
+                        logger.info(f"Sample {i} generated. Loss : {loss.item()}")
 
                 if len(inputs) >= args.n:
                     break
 
-        fig, axes = plt.subplots(
+        _fig, axes = plt.subplots(
             nrows=3, ncols=args.n, figsize=(3 * args.n, 9), squeeze=False
         )
 
@@ -162,9 +158,7 @@ class TestCommand(Command):
 
             def tensor_to_np(tensor):
                 np_img = tensor.permute(1, 2, 0).numpy()
-                if (
-                    np_img.shape[-1] == 1
-                ):  # If grayscale, squeeze the channel dimension
+                if np_img.shape[-1] == 1:  # If grayscale, squeeze the channel dimension
                     np_img = np_img.squeeze(-1)
                 return np_img
 

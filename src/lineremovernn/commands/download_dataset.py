@@ -34,7 +34,7 @@ class DownloadDatasetCommand(Command):
             "-d",
             "--dataset",
             type=str,
-            choices=[x.lower() for x in downloadable_datasets.keys()],
+            choices=[x.lower() for x in downloadable_datasets],
             default="iam",
             help="Which dataset to download (default: iam).",
         )

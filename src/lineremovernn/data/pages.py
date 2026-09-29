@@ -97,9 +97,7 @@ class PagesDataset(TorchDataset):
         self.load_label = load_label
 
         # Check dataset validity
-        if not len(os.listdir(self.ruled_path)) == len(
-            os.listdir(self.clean_path)
-        ):
+        if not len(os.listdir(self.ruled_path)) == len(os.listdir(self.clean_path)):
             raise ValueError(
                 "Clean and ruled input directories must have the same number of files."
             )
@@ -107,9 +105,9 @@ class PagesDataset(TorchDataset):
     def __len__(self) -> int:
         return len(os.listdir(self.ruled_path))
 
-    def __getitem__(self, idx) -> tuple[Tensor, Tensor, Page | None]:
-        ruled_img_path = self.ruled_path / f"{idx}.jpg"
-        clean_img_path = self.clean_path / f"{idx}.jpg"
+    def __getitem__(self, index) -> tuple[Tensor, Tensor, Page | None]:
+        ruled_img_path = self.ruled_path / f"{index}.jpg"
+        clean_img_path = self.clean_path / f"{index}.jpg"
         ruled = decode_image(str(ruled_img_path), ImageReadMode.GRAY)
         clean = decode_image(str(clean_img_path), ImageReadMode.GRAY)
         ruled = tv_tensors.Image(ruled)
@@ -124,9 +122,9 @@ class PagesDataset(TorchDataset):
                 clean,
                 None,
             )
-        label_path = self.labels_path / f"{idx}.xml"
+        label_path = self.labels_path / f"{index}.xml"
         if not label_path.exists():
-            logger.warning("Couldnt load %d's metadata file.", idx)
+            logger.warning("Couldnt load %d's metadata file.", index)
             if self.transform:
                 ruled, clean = self.transform(ruled, clean)
 

@@ -50,7 +50,7 @@ class Dataset(ABC):
         pass
 
     @abstractmethod
-    def __getitem__(self, idx) -> Any:
+    def __getitem__(self, index) -> Any:
         pass
 
     @classmethod
@@ -93,8 +93,8 @@ class CachedDataset(Dataset):
     def __len__(self) -> int:
         return len(self.assets)
 
-    def __getitem__(self, idx: int) -> CropAsset:
-        meta = self.assets[idx]
+    def __getitem__(self, index: int) -> CropAsset:
+        meta = self.assets[index]
 
         if self.preload_enabled:
             # Look up instantly from our preloaded dictionary
@@ -108,12 +108,10 @@ class CachedDataset(Dataset):
 
 class ImageDataset(CachedDataset):
     # @lru_cache(maxsize=200)
-    def get_image(self, idx: int, mode="RGBA") -> Image.Image:
-        asset = super().__getitem__(idx)
+    def get_image(self, index: int, mode="RGBA") -> Image.Image:
+        asset = super().__getitem__(index)
         if asset.raw_bytes is None:
-            raise FileNotFoundError(
-                f"Could not read image bytes from {asset.path}"
-            )
+            raise FileNotFoundError(f"Could not read image bytes from {asset.path}")
         return Image.open(BytesIO(asset.raw_bytes)).convert(mode)
 
 
@@ -160,12 +158,10 @@ class DownloadableDataset(Dataset):
 
     @classmethod
     @abstractmethod
-    def extract(
-        cls, download_path: str, dataset_path: str, force: bool = False
-    ):
+    def extract(cls, download_path: str, dataset_path: str, force: bool = False):
         pass
 
 
 class TorchDataset(Dataset, TorchADataset, ABC):
     @abstractmethod
-    def __getitem__(self, idx): ...
+    def __getitem__(self, index): ...

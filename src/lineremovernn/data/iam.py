@@ -46,9 +46,7 @@ class IAMDataset(DownloadableDataset, ImageDataset):
                 line = line.rstrip()
                 if line.startswith("#") or len(line.split(" ")) != 9:
                     continue
-                filename, segmentation, _, _, _, _, _, _, transcript = (
-                    line.split(" ")
-                )
+                filename, segmentation, _, _, _, _, _, _, transcript = line.split(" ")
                 if segmentation == "err":
                     continue
 
@@ -62,16 +60,14 @@ class IAMDataset(DownloadableDataset, ImageDataset):
                 )
 
                 # Exclusively utilize the standardized self.assets stream
-                self.assets.append(
-                    CropAsset(path=str(img_path), text=transcript)
-                )
+                self.assets.append(CropAsset(path=str(img_path), text=transcript))
 
         if self.preload_enabled:
             self.preload()
 
     # @lru_cache(maxsize=200)
-    def get_image(self, idx: int, mode="RGBA") -> Image.Image:
-        img = ImageDataset.get_image(self, idx)
+    def get_image(self, index: int, mode="RGBA") -> Image.Image:
+        img = ImageDataset.get_image(self, index)
 
         # Crop logic
         orig_w, orig_h = img.size
@@ -122,9 +118,7 @@ class IAMDataset(DownloadableDataset, ImageDataset):
             )
 
     @classmethod
-    def extract(
-        cls, download_path: str, dataset_path: str, force: bool = False
-    ):
+    def extract(cls, download_path: str, dataset_path: str, force: bool = False):
         target_root = Path(dataset_path)
         dl_source_dir = Path(download_path) / "IAM_Words" / "IAM_Words"
 
@@ -156,9 +150,7 @@ class IAMDataset(DownloadableDataset, ImageDataset):
         if not txt_out_target.exists() or force:
             words_txt.rename(txt_out_target)
         else:
-            raise FileExistsError(
-                f"Metadata file already exists at {txt_out_target}."
-            )
+            raise FileExistsError(f"Metadata file already exists at {txt_out_target}.")
 
         logger.info("Dataset staging completed successfully.")
 
@@ -168,9 +160,7 @@ class IAMDataset(DownloadableDataset, ImageDataset):
     ) -> None:
         extract_to.mkdir(parents=True, exist_ok=True)
 
-        with tempfile.NamedTemporaryFile(
-            suffix=".zip", delete=True
-        ) as tmp_file:
+        with tempfile.NamedTemporaryFile(suffix=".zip", delete=True) as tmp_file:
             logger.info("Establishing secure downstream connection...")
             with urlopen(url) as response:
                 total_size = int(response.headers.get("Content-Length", 0))

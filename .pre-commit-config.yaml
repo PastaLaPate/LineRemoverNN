@@ -1,18 +1,17 @@
 repos:
-  - repo: local
+  - repo: https://github.com/astral-sh/uv-pre-commit
+    # uv version.
+    rev: 0.12.19
     hooks:
-      - id: ruff-format
-        name: ruff format
-        language: system
-        entry: uv run ruff format
-        types: [python]
+      - id: uv-lock
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.16.9
+    hooks:
       - id: ruff-check
-        name: ruff check
-        language: system
-        entry: uv run ruff check
-        types: [python]
-      - id: ty-check
-        name: ty check
-        language: system
-        entry: uv run ty check
-        pass_filenames: false
+        args: [--fix]
+      - id: ruff-format
+  - repo: https://github.com/astral-sh/ty-pre-commit
+    # ty version.
+    rev: v0.0.84
+    hooks:
+      - id: ty

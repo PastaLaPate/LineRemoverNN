@@ -5,6 +5,7 @@ import tarfile
 from pathlib import Path
 from urllib.request import urlopen
 from xml.etree import ElementTree
+from xml.etree.ElementTree import ParseError
 
 import cairo
 import numpy as np
@@ -35,19 +36,15 @@ class InkMLParser:
         try:
             with open(filename, "r", encoding="UTF-8") as f:
                 root = ElementTree.fromstring(f.read())
-        except Exception as e:
-            logger.error(
-                f"Failed to parse InkML text structure at {filename}: {e}"
-            )
+        except ParseError as e:
+            logger.error(f"Failed to parse InkML text structure at {filename}: {e}")
             return [], ""
 
         strokes = []
         label = ""
 
         for element in root:
-            tag_name = element.tag.removeprefix(
-                "{http://www.w3.org/2003/InkML}"
-            )
+            tag_name = element.tag.removeprefix("{http://www.w3.org/2003/InkML}")
 
             if tag_name == "annotation":
                 attrib_type = element.attrib.get("type", "")
@@ -68,9 +65,7 @@ class InkMLParser:
                         stroke_y.append(float(parts[1]))
 
                 if stroke_x:
-                    strokes.append(
-                        np.array([stroke_x, stroke_y], dtype=np.float32)
-                    )
+                    strokes.append(np.array([stroke_x, stroke_y], dtype=np.float32))
 
         return strokes, label
 
@@ -89,9 +84,7 @@ class MathWritingDataset(DownloadableDataset, ImageDataset):
         else "https://storage.googleapis.com/mathwriting_data/mathwriting-2024.tgz"
     )
     FILENAME = (
-        "mathwriting-2024-excerpt.tgz"
-        if EXCERPT_MODE
-        else "mathwriting-2024.tgz"
+        "mathwriting-2024-excerpt.tgz" if EXCERPT_MODE else "mathwriting-2024.tgz"
     )
 
     def __init__(self, preload: bool = False):
@@ -122,13 +115,13 @@ class MathWritingDataset(DownloadableDataset, ImageDataset):
             self.preload()
 
     # @lru_cache(maxsize=200)
-    def get_image(self, idx: int, mode="RGBA") -> Image.Image:
+    def get_image(self, index: int, mode="RGBA") -> Image.Image:
         """
         Parses underlying ink strokes from the file system and performs on-the-fly
         vector-to-rasterization processing directly to transparent RGBA matrices.
         """
         # Resolves correct tracking metadata profile via base class assignment
-        asset = ImageDataset.__getitem__(self, idx)
+        asset = ImageDataset.__getitem__(self, index)
         file_path = Path(asset.path)
 
         # 1. Parse trace points from the file system
@@ -136,9 +129,7 @@ class MathWritingDataset(DownloadableDataset, ImageDataset):
 
         # Retroactively cache the text label if it wasn't extracted during metadata initialization
         if transcript and not asset.text:
-            self.assets[idx] = CropAsset(
-                asset.path, transcript, asset.raw_bytes
-            )
+            self.assets[index] = CropAsset(asset.path, transcript, asset.raw_bytes)
 
         if not strokes:
             # Fallback for empty/malformed vector structures
@@ -203,9 +194,7 @@ class MathWritingDataset(DownloadableDataset, ImageDataset):
 
         # 1. Create a view, NOT a copy. This is instantaneous.
         # cairo FORMAT_ARGB32 is B-G-R-A in memory.
-        img_array = np.frombuffer(buf, dtype=np.uint8).reshape(
-            (height, width, 4)
-        )
+        img_array = np.frombuffer(buf, dtype=np.uint8).reshape((height, width, 4))
 
         if mode == "RGBA":
             # Just swap channels using a view or simple index mapping
@@ -257,9 +246,7 @@ class MathWritingDataset(DownloadableDataset, ImageDataset):
             )
 
     @classmethod
-    def extract(
-        cls, download_path: str, dataset_path: str, force: bool = False
-    ):
+    def extract(cls, download_path: str, dataset_path: str, force: bool = False):
         download_p = Path(download_path)
         dataset_p = Path(dataset_path)
         archive_source = download_p / cls.FILENAME

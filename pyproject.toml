@@ -3,7 +3,7 @@ name = "lineremovernn"
 version = "0.0.1"
 description = "Add your description here"
 readme = "README.md"
-requires-python = ">=3.12"
+requires-python = ">=3.14"
 dependencies = [
   "colorama>=0.4.6",
   "distro>=1.9.0",
@@ -13,7 +13,7 @@ dependencies = [
   "pycairo>=1.29.0",
   "torch>=2.9.0",
   "torchinfo>=1.8.0",
-  "torchvision==0.24.0",
+  "torchvision>=0.24.0",
   "tqdm>=4.67.3",
   "ty>=0.0.44",
 ]
@@ -53,14 +53,14 @@ lineremovernn = ["scikit-build-core"]
 members = ["."]
 
 [[tool.uv.index]]
-name = "pytorch-cu130"
-url = "https://download.pytorch.org/whl/cu130"
+name = "pytorch-cu132"
+url = "https://download.pytorch.org/whl/cu132"
 explicit = true
 
 [tool.uv.sources]
 torch = [
-  { index = "pytorch-cu130", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
+  { index = "pytorch-cu132", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
 ]
 torchvision = [
-  { index = "pytorch-cu130", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
+  { index = "pytorch-cu132", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
 ]

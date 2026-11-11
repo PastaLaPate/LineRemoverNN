@@ -8,6 +8,7 @@ import torch
 from torch import Tensor
 from torchvision import tv_tensors
 from torchvision.io import ImageReadMode, decode_image
+from torchvision.transforms import v2
 
 from lineremovernn.data.dataset import TorchDataset
 from lineremovernn.utils import logging
@@ -57,7 +58,7 @@ class Page:
                     yield line_idx, word, self.boxes[flat_idx]
                     flat_idx += 1
 
-    def lines_with_boxes(self) -> list[list[tuple["Word", Tensor]]]:
+    def lines_with_boxes(self) -> list[list[tuple[Word, Tensor]]]:
         """Same shape as `lines`, but each entry is (Word, box) instead of just Word."""
         out = []
         flat_idx = 0
@@ -69,6 +70,40 @@ class Page:
                     flat_idx += 1
                 out.append(line_out)
         return out
+
+
+STANDARD_TRANSFORMS = v2.Compose(
+    [
+        v2.RandomCrop((256, 256)),
+        v2.RandomRotation((-0.5, 0.5)),
+        v2.ToDtype(torch.float32, scale=True),
+    ]
+)
+
+EXTENDED_TRANSFORM = v2.Compose(
+    [
+        v2.RandomCrop(
+            (384, 384),
+            pad_if_needed=True,
+            fill=0,
+            padding_mode="constant",
+        ),
+        v2.RandomPerspective(distortion_scale=0.15, p=0.5, fill=0),
+        v2.RandomAffine(
+            degrees=(-5, 5),
+            shear=(-4, 4),
+            fill=0,
+        ),
+        v2.RandomZoomOut(fill=0, side_range=(1.0, 2.0)),
+        v2.RandomResizedCrop(
+            (256, 256),  # .3 = 3x zoom in, 1.0 = no zoom
+            scale=(1 / 9, 1),
+            ratio=(1, 1),
+            antialias=True,
+        ),
+        v2.ToDtype(torch.float32, scale=True),
+    ]
+)
 
 
 def collate_pages(

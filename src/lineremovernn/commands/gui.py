@@ -12,7 +12,7 @@ from torchvision.transforms import v2
 
 from lineremovernn.commands.command import Command
 from lineremovernn.model.lineremover import LineRemovalUNet
-from lineremovernn.utils.consts import DEFAULT_MODELS, DEVICE
+from lineremovernn.utils.consts import DEFAULT_MODELS, DEVICE, USE_AMP
 from lineremovernn.utils.saver import get_latest_model, load_model
 
 logger = logging.getLogger("GUIInfer")
@@ -41,9 +41,7 @@ class GUIInferCommand(Command):
         if lm is not None:
             latest_model = load_model(lm[1], training=False)
             model.load_state_dict(latest_model.model_state)
-            logger.info(
-                f"Loaded weights from epoch {latest_model.stats.epoch}"
-            )
+            logger.info(f"Loaded weights from epoch {latest_model.stats.epoch}")
         else:
             logger.warning("No saved model found! Using random weights.")
 
@@ -110,9 +108,7 @@ class LineRemoverApp:
         self.btn_save.pack(side=tk.LEFT, padx=10, pady=10)
 
         workspace = tk.Frame(self.root, bg="#f5f5f5")
-        workspace.pack(
-            side=tk.TOP, fill=tk.BOTH, expand=True, padx=10, pady=10
-        )
+        workspace.pack(side=tk.TOP, fill=tk.BOTH, expand=True, padx=10, pady=10)
 
         frame_input = tk.LabelFrame(
             workspace,
@@ -120,12 +116,8 @@ class LineRemoverApp:
             font=("Arial", 10, "bold"),
             bg="#f5f5f5",
         )
-        frame_input.pack(
-            side=tk.LEFT, fill=tk.BOTH, expand=True, padx=5, pady=5
-        )
-        self.lbl_input = tk.Label(
-            frame_input, text="No image loaded", bg="#e8e8e8"
-        )
+        frame_input.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=5, pady=5)
+        self.lbl_input = tk.Label(frame_input, text="No image loaded", bg="#e8e8e8")
         self.lbl_input.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
 
         frame_output = tk.LabelFrame(
@@ -134,9 +126,7 @@ class LineRemoverApp:
             font=("Arial", 10, "bold"),
             bg="#f5f5f5",
         )
-        frame_output.pack(
-            side=tk.LEFT, fill=tk.BOTH, expand=True, padx=5, pady=5
-        )
+        frame_output.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=5, pady=5)
         self.lbl_output = tk.Label(
             frame_output, text="Awaiting processing...", bg="#e8e8e8"
         )
@@ -145,9 +135,7 @@ class LineRemoverApp:
     def load_image(self):
         file_path = filedialog.askopenfilename(
             parent=self.root,
-            filetypes=[
-                ("Image Files", "*.png *.jpg *.jpeg *.bmp *.tiff *.webp")
-            ],
+            filetypes=[("Image Files", "*.png *.jpg *.jpeg *.bmp *.tiff *.webp")],
         )
         if not file_path:
             return
@@ -161,7 +149,7 @@ class LineRemoverApp:
 
             self.display_preview(self.source_image, self.lbl_input)
             self.btn_process.config(state=tk.NORMAL)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             messagebox.showerror("Error", f"Failed to load image:\n{e!s}")
 
     def process_image(self):
@@ -180,9 +168,7 @@ class LineRemoverApp:
             pad_h = (256 - orig_h % 256) % 256
             pad_w = (256 - orig_w % 256) % 256
 
-            padded_tensor = F.pad(
-                img_tensor, (0, pad_w, 0, pad_h), mode="reflect"
-            )
+            padded_tensor = F.pad(img_tensor, (0, pad_w, 0, pad_h), mode="reflect")
             _, ph, pw = padded_tensor.shape
 
             output_tensor = torch.zeros_like(padded_tensor)
@@ -194,12 +180,12 @@ class LineRemoverApp:
                         # Reshapes to [1, 1, 256, 256] for your Grayscale model
                         tile_batch = tile.unsqueeze(0).to(DEVICE)
 
-                        with autocast(DEVICE):
+                        with autocast(DEVICE, dtype=torch.float16, enabled=USE_AMP):
                             pred_tile = self.model(tile_batch)
 
-                        output_tensor[:, y : y + 256, x : x + 256] = (
-                            pred_tile.squeeze(0).cpu()
-                        )
+                        output_tensor[:, y : y + 256, x : x + 256] = pred_tile.squeeze(
+                            0
+                        ).cpu()
 
             # Crop back to original sizes
             output_tensor = output_tensor[:, :orig_h, :orig_w]
@@ -216,7 +202,7 @@ class LineRemoverApp:
                 self.display_preview(self.processed_image, self.lbl_output)
             self.btn_save.config(state=tk.NORMAL)
 
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             messagebox.showerror(
                 "Inference Error",
                 f"An error occurred while cleaning the image:\n{e!s}",
@@ -239,7 +225,7 @@ class LineRemoverApp:
         try:
             self.processed_image.save(file_path)
             messagebox.showinfo("Success", "Cleaned image saved successfully!")
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             messagebox.showerror("Save Error", f"Could not save file:\n{e!s}")
 
     def display_preview(self, pil_img: Image.Image, label_widget: tk.Label):

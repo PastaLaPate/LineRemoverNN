@@ -4,7 +4,14 @@ from torch.cuda import is_available as torch_cuda_available
 
 from lineremovernn import commands
 from lineremovernn.utils import logging
-from lineremovernn.utils.consts import ARCH, HAS_EXT, OS, PYTHON_VERSION, VERSION
+from lineremovernn.utils.consts import (
+    ARCH,
+    HAS_EXT,
+    OS,
+    PYTHON_VERSION,
+    USE_AMP,
+    VERSION,
+)
 
 logger = logging.get_logger("Main")
 
@@ -14,8 +21,9 @@ def main():
     logger.debug("Has EXT : %d", HAS_EXT)
     logger.debug("OS: %s | Python: %s | Architecture: %s", OS, PYTHON_VERSION, ARCH)
     logger.info(
-        "Cuda availability : %s",
+        "Cuda availability: %s, Autocast availability: %s",
         "available" if torch_cuda_available() else "not available",
+        USE_AMP,
     )
 
     parser = argparse.ArgumentParser(

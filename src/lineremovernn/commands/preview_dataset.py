@@ -2,12 +2,14 @@ import random
 from argparse import Namespace
 
 import matplotlib.pyplot as plt
-import torch
 from matplotlib import patches
-from torchvision.transforms import v2
 
 from lineremovernn.commands.command import Command
-from lineremovernn.data.pages import PagesDataset
+from lineremovernn.data.pages import (
+    EXTENDED_TRANSFORM,
+    STANDARD_TRANSFORMS,
+    PagesDataset,
+)
 from lineremovernn.utils import logging
 
 logger = logging.get_logger("DatasetPreviewer")
@@ -46,35 +48,7 @@ class PreviewDatasetCommand(Command):
     def execute(self, args: Namespace) -> None:
         if args.dataset == "pages":
             pages = PagesDataset(
-                v2.Compose(
-                    [
-                        v2.RandomCrop(
-                            (384, 384),
-                            pad_if_needed=True,
-                            fill=0,
-                            padding_mode="constant",
-                        ),
-                        v2.RandomPerspective(distortion_scale=0.15, p=0.5, fill=0),
-                        v2.RandomAffine(
-                            degrees=(-1.5, 1.5),
-                            scale=(
-                                0.75,
-                                1.3,
-                            ),
-                            shear=(-4, 4),
-                            fill=0,
-                        ),
-                        v2.RandomCrop(
-                            (256, 256),
-                            pad_if_needed=True,
-                            fill=0,
-                            padding_mode="constant",
-                        ),
-                        v2.ToDtype(torch.float32, scale=True),
-                    ]
-                )
-                if args.transform
-                else None,
+                EXTENDED_TRANSFORM if args.transform else STANDARD_TRANSFORMS,
                 True,
             )
             if len(pages) < args.n:

@@ -5,13 +5,17 @@ import matplotlib.pyplot as plt
 import torch
 from torch.amp.autocast_mode import autocast
 from torch.utils.data import DataLoader
-from torchvision.transforms import v2
 
 from lineremovernn.commands.command import Command
-from lineremovernn.data.pages import PagesDataset, collate_pages
+from lineremovernn.data.pages import (
+    EXTENDED_TRANSFORM,
+    STANDARD_TRANSFORMS,
+    PagesDataset,
+    collate_pages,
+)
 from lineremovernn.model.lineremover import LineRemovalUNet
 from lineremovernn.utils import logging
-from lineremovernn.utils.consts import DEFAULT_MODELS, DEVICE
+from lineremovernn.utils.consts import DEFAULT_MODELS, DEVICE, USE_AMP
 from lineremovernn.utils.loss import criterion
 from lineremovernn.utils.saver import (
     get_latest_model,
@@ -51,6 +55,12 @@ class TestCommand(Command):
             help="Training dataset's path.",
         )
         parser.add_argument(
+            "-e",
+            "--extended",
+            action="store_true",
+            help="Extended dataset transforms.",
+        )
+        parser.add_argument(
             "-l",
             "--loss",
             action="store_true",
@@ -79,35 +89,9 @@ class TestCommand(Command):
 
         model.eval()
 
-        transforms = v2.Compose(
-            [
-                v2.RandomCrop(
-                    (384, 384),
-                    pad_if_needed=True,
-                    fill=0,
-                    padding_mode="constant",
-                ),
-                v2.RandomPerspective(distortion_scale=0.15, p=0.5, fill=0),
-                v2.RandomAffine(
-                    degrees=(-1.5, 1.5),
-                    scale=(
-                        0.75,
-                        1.3,
-                    ),
-                    shear=(-4, 4),
-                    fill=0,
-                ),
-                v2.RandomCrop(
-                    (256, 256),
-                    pad_if_needed=True,
-                    fill=0,
-                    padding_mode="constant",
-                ),
-                v2.ToDtype(torch.float32, scale=True),
-            ]
+        dataset = PagesDataset(
+            STANDARD_TRANSFORMS if not args.extended else EXTENDED_TRANSFORM
         )
-
-        dataset = PagesDataset(transforms)
         dataloader = DataLoader(
             dataset,
             batch_size=args.batch_size,
@@ -123,15 +107,11 @@ class TestCommand(Command):
         losses: list[float] = []
 
         logger.info(f"Gathering {args.n} samples for visual inference...")
-        major, _ = torch.cuda.get_device_capability(DEVICE)
-        use_amp = major >= 7 and torch.cuda.get_device_name(DEVICE).startswith(
-            ("RTX", "A")
-        )  # or simply major >= 8
         with torch.no_grad():
             for r, c, p in dataloader:
                 ruled = r.to(DEVICE)
 
-                with autocast(DEVICE, dtype=torch.float16, enabled=use_amp):
+                with autocast(DEVICE, dtype=torch.float16, enabled=USE_AMP):
                     pred = model(ruled)
 
                 ruled = ruled.cpu()

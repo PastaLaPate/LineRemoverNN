@@ -8,9 +8,7 @@ class DoubleConv(nn.Module):
     def __init__(self, in_channels: int, out_channels: int):
         super().__init__()
         self.net = nn.Sequential(
-            nn.Conv2d(
-                in_channels, out_channels, kernel_size=3, padding=1, bias=False
-            ),
+            nn.Conv2d(in_channels, out_channels, kernel_size=3, padding=1, bias=False),
             nn.BatchNorm2d(out_channels),
             nn.ReLU(inplace=True),
             nn.Conv2d(
@@ -86,9 +84,7 @@ class LineRemovalUNet(nn.Module):
 
         # --- Decoder Pass with Skip Connections ---
         d4 = self.up4(b)
-        d4 = torch.cat(
-            [e4, d4], dim=1
-        )  # Concatenate spatial information from encoder
+        d4 = torch.cat([e4, d4], dim=1)  # Concatenate spatial information from encoder
         d4 = self.dec4(d4)
 
         d3 = self.up3(d4)
@@ -103,13 +99,9 @@ class LineRemovalUNet(nn.Module):
         d1 = torch.cat([e1, d1], dim=1)
         d1 = self.dec1(d1)
 
-        # --- The Residual Masking Step ---
-        # 1. Predict the intensity of the lines
         mask_logits = self.mask_out(d1)
         line_mask = self.sigmoid(mask_logits)
 
-        # 2. Subtract the mask (or add it, depending on normalization)
-        # Assuming your input data is normalized to [0.0, 1.0] where 0.0 is black ink and 1.0 is white paper.
         # Since lines darken the page, we ADD the predicted line mask to restore the paper to white.
         clean_output = torch.clamp(x + line_mask, 0.0, 1.0)
 
@@ -119,9 +111,7 @@ class LineRemovalUNet(nn.Module):
 # Quick sanity check
 if __name__ == "__main__":
     model = LineRemovalUNet().cuda()
-    dummy_input = torch.randn(
-        8, 1, 256, 256
-    ).cuda()  # Batch of 8, 1-channel, 256x256
+    dummy_input = torch.randn(8, 1, 256, 256).cuda()  # Batch of 8, 1-channel, 256x256
     output = model(dummy_input)
     print(f"Input shape: {dummy_input.shape}")
     print(f"Output shape: {output.shape}")

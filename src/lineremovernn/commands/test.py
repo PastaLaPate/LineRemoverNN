@@ -123,13 +123,15 @@ class TestCommand(Command):
         losses: list[float] = []
 
         logger.info(f"Gathering {args.n} samples for visual inference...")
+        major, _ = torch.cuda.get_device_capability(DEVICE)
+        use_amp = major >= 7 and torch.cuda.get_device_name(DEVICE).startswith(
+            ("RTX", "A")
+        )  # or simply major >= 8
         with torch.no_grad():
-            i = 0
             for r, c, p in dataloader:
-                i += 1
                 ruled = r.to(DEVICE)
 
-                with autocast(DEVICE):
+                with autocast(DEVICE, dtype=torch.float16, enabled=use_amp):
                     pred = model(ruled)
 
                 ruled = ruled.cpu()

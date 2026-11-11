@@ -3,7 +3,7 @@ name = "lineremovernn"
 version = "0.0.1"
 description = "Add your description here"
 readme = "README.md"
-requires-python = ">=3.14"
+requires-python = ">=3.15"
 dependencies = [
   "colorama>=0.4.6",
   "distro>=1.9.0",

@@ -146,6 +146,8 @@ class TestCommand(Command):
                         loss = criterion(pred[i], clean[i])
                         losses.append(loss.item())
                         logger.info(f"Sample {i} generated. Loss : {loss.item()}")
+                    else:
+                        logger.info(f"Sample {i} generated.")
 
                 if len(inputs) >= args.n:
                     break
